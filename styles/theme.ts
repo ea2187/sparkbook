@@ -1,5 +1,7 @@
 // Sparkbook Style Guide
 
+import { TextStyle, ViewStyle } from 'react-native';
+
 // Color Palette
 export const colors = {
   // Primary Colors
@@ -58,10 +60,10 @@ export const typography = {
   },
   
   fontWeight: {
-    regular: '400',
-    medium: '500',
-    semiBold: '600',
-    bold: '700',
+    regular: '400' as TextStyle['fontWeight'],
+    medium: '500' as TextStyle['fontWeight'],
+    semiBold: '600' as TextStyle['fontWeight'],
+    bold: '700' as TextStyle['fontWeight'],
   },
 };
 
@@ -119,21 +121,21 @@ export const components = {
       borderRadius: borderRadius.md,
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.lg,
-    },
+    } as ViewStyle,
     secondary: {
       backgroundColor: colors.secondary,
       borderRadius: borderRadius.md,
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.lg,
-    },
+    } as ViewStyle,
     outline: {
-      backgroundColor: 'transparent',
+      backgroundColor: 'transparent' as const,
       borderWidth: 1,
       borderColor: colors.primary,
       borderRadius: borderRadius.md,
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.lg,
-    },
+    } as ViewStyle,
   },
   
   card: {
@@ -141,7 +143,7 @@ export const components = {
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     ...shadows.md,
-  },
+  } as ViewStyle,
   
   input: {
     backgroundColor: colors.white,
@@ -151,7 +153,7 @@ export const components = {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     fontSize: typography.fontSize.base,
-  },
+  } as TextStyle,
 };
 
 // Export default theme object

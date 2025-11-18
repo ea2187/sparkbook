@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { FC } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import theme from '../styles/theme';
 
-export default function SocialScreen() {
+const SocialScreen: FC = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Social</Text>
@@ -30,3 +30,5 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 });
+
+export default SocialScreen;
