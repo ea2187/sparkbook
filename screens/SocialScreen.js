@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import theme from '../styles/theme';
 
 export default function SocialScreen() {
   return (
@@ -13,17 +14,19 @@ export default function SocialScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontSize: theme.typography.fontSize.xxxl,
+    fontFamily: theme.typography.fontFamily.bold,
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.sm,
   },
   subtitle: {
-    fontSize: 18,
-    color: '#666',
+    fontSize: theme.typography.fontSize.lg,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
   },
 });
