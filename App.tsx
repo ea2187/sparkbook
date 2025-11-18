@@ -1,20 +1,22 @@
+import React, { FC, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from './screens/HomeScreen';
 import SocialScreen from './screens/SocialScreen';
 import theme from './styles/theme';
+import type { RootTabParamList } from './types';
+import { supabase } from './lib/supabase';
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync();
 
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<RootTabParamList>();
 
-export default function App() {
+const App: FC = () => {
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -27,6 +29,15 @@ export default function App() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  // Check auth status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data } = await supabase.auth.getUser();
+      console.log('Current logged user:', data.user);
+    };
+    checkAuth();
+  }, []);
 
   if (!fontsLoaded) {
     return null;
@@ -68,4 +79,6 @@ export default function App() {
       </Tab.Navigator>
     </NavigationContainer>
   );
-}
+};
+
+export default App;
