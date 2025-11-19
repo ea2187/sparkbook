@@ -8,22 +8,25 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import theme from '../styles/theme';
 import { supabase } from '../lib/supabase';
-import { Board, RootTabParamList } from '../types';
+import { Board, HomeStackParamList } from '../types';
 import BoardPreviewCard from '../components/BoardPreviewCard';
 
-type HomeScreenNavigationProp = BottomTabNavigationProp<RootTabParamList, 'Home'>;
+type HomeScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'HomeMain'>;
 
 const HomeScreen: FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newBoardName, setNewBoardName] = useState('');
 
   useEffect(() => {
     fetchBoards();
@@ -80,28 +83,25 @@ const HomeScreen: FC = () => {
   }
 
   function handleAddSparklette() {
-    Alert.prompt(
-      'New Board',
-      'Enter board name:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create',
-          onPress: (name) => {
-            if (name && name.trim()) {
-              createBoard(name.trim());
-            }
-          },
-        },
-      ],
-      'plain-text'
-    );
+    setNewBoardName('');
+    setShowCreateModal(true);
+  }
+
+  function handleCreateBoard() {
+    if (newBoardName && newBoardName.trim()) {
+      createBoard(newBoardName.trim());
+      setShowCreateModal(false);
+      setNewBoardName('');
+    }
+  }
+
+  function handleCancelCreate() {
+    setShowCreateModal(false);
+    setNewBoardName('');
   }
 
   function handleBoardPress(board: Board) {
-    // Navigate to board screen when implemented
-    console.log('Board pressed:', board.name);
-    // navigation.navigate('Board', { boardId: board.id });
+    navigation.navigate('Board', { boardId: board.id });
   }
 
   return (
@@ -180,6 +180,44 @@ const HomeScreen: FC = () => {
       <Pressable style={styles.floatingButton} onPress={handleAddSparklette}>
         <Ionicons name="add" size={32} color={theme.colors.white} />
       </Pressable>
+
+      {/* Create Board Modal */}
+      <Modal
+        visible={showCreateModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelCreate}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>New Board</Text>
+            <Text style={styles.modalSubtitle}>Enter board name:</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Board name"
+              placeholderTextColor={theme.colors.textLight}
+              value={newBoardName}
+              onChangeText={setNewBoardName}
+              autoFocus={true}
+              onSubmitEditing={handleCreateBoard}
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={handleCancelCreate}
+              >
+                <Text style={styles.modalButtonCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonCreate]}
+                onPress={handleCreateBoard}
+              >
+                <Text style={styles.modalButtonCreateText}>Create</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -314,6 +352,64 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...theme.shadows.lg,
     elevation: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    width: '80%',
+    maxWidth: 400,
+    ...theme.shadows.lg,
+  },
+  modalTitle: {
+    fontSize: theme.typography.fontSize.xl,
+    fontFamily: theme.typography.fontFamily.bold,
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.xs,
+  },
+  modalSubtitle: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.md,
+  },
+  modalInput: {
+    ...theme.components.input,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.lg,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.md,
+  },
+  modalButton: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.borderRadius.md,
+  },
+  modalButtonCancel: {
+    backgroundColor: 'transparent',
+  },
+  modalButtonCancelText: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.textSecondary,
+  },
+  modalButtonCreate: {
+    backgroundColor: theme.colors.primary,
+  },
+  modalButtonCreateText: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.white,
   },
 });
 

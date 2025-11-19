@@ -1,15 +1,17 @@
-import React, { FC, useEffect } from 'react';
+import React, { FC, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { Ionicons } from '@expo/vector-icons';
-import HomeScreen from './screens/HomeScreen';
+import HomeStackNavigator from './navigators/HomeStackNavigator';
 import SocialScreen from './screens/SocialScreen';
+import LoginScreen from './screens/LoginScreen';
 import theme from './styles/theme';
 import type { RootTabParamList } from './types';
 import { supabase } from './lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync();
@@ -23,6 +25,8 @@ const App: FC = () => {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -30,19 +34,47 @@ const App: FC = () => {
     }
   }, [fontsLoaded]);
 
-  // Check auth status on mount
+  // Check auth status on mount and listen for changes
   useEffect(() => {
+    // Check initial auth state
     const checkAuth = async () => {
       const { data } = await supabase.auth.getUser();
-      console.log('Current logged user:', data.user);
+      setUser(data.user);
+      setLoading(false);
     };
     checkAuth();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  if (!fontsLoaded) {
+  const handleLoginSuccess = () => {
+    // Auth state will be updated via the listener
+    setLoading(false);
+  };
+
+  if (!fontsLoaded || loading) {
     return null;
   }
 
+  // Show login screen if not authenticated
+  if (!user) {
+    return (
+      <>
+        <StatusBar style="auto" />
+        <LoginScreen onLoginSuccess={handleLoginSuccess} />
+      </>
+    );
+  }
+
+  // Show main app if authenticated
   return (
     <NavigationContainer>
       <StatusBar style="auto" />
@@ -58,12 +90,17 @@ const App: FC = () => {
       >
         <Tab.Screen 
           name="Home" 
-          component={HomeScreen}
-          options={{
-            tabBarLabel: 'Home',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home" size={size} color={color} />
-            ),
+          component={HomeStackNavigator}
+          options={({ route }) => {
+            const routeName = getFocusedRouteNameFromRoute(route) ?? 'HomeMain';
+            return {
+              headerShown: false, // Header is handled by the stack navigator
+              tabBarLabel: 'Home',
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="home" size={size} color={color} />
+              ),
+              tabBarStyle: routeName === 'Board' ? { display: 'none' } : undefined,
+            };
           }}
         />
         <Tab.Screen 

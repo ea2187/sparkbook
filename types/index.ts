@@ -2,6 +2,10 @@
 export type RootTabParamList = {
   Home: undefined;
   Social: undefined;
+};
+
+export type HomeStackParamList = {
+  HomeMain: undefined;
   Board: { boardId: string };
 };
 
