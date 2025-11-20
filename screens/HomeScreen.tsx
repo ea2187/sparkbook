@@ -72,7 +72,7 @@ const HomeScreen: FC = () => {
         .single();
 
       if (error) {
-        console.error('Error creating board:', error);
+        console.error('Error creating caboard:', error);
         Alert.alert('Error', 'Failed to create board');
       } else {
         setBoards([data, ...boards]);
@@ -175,11 +175,6 @@ const HomeScreen: FC = () => {
           ))
         )}
       </ScrollView>
-
-      {/* Floating Add Button */}
-      <Pressable style={styles.floatingButton} onPress={handleAddSparklette}>
-        <Ionicons name="add" size={32} color={theme.colors.white} />
-      </Pressable>
 
       {/* Create Board Modal */}
       <Modal
@@ -339,19 +334,6 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textSecondary,
     textAlign: 'center',
-  },
-  floatingButton: {
-    position: 'absolute',
-    bottom: 80, // Above the tab bar
-    alignSelf: 'center',
-    width: 64,
-    height: 64,
-    borderRadius: theme.borderRadius.round,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...theme.shadows.lg,
-    elevation: 8,
   },
   modalOverlay: {
     flex: 1,
