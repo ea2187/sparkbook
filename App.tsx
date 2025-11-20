@@ -4,7 +4,6 @@ import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-naviga
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
-import { Ionicons } from '@expo/vector-icons';
 import HomeStackNavigator from './navigators/HomeStackNavigator';
 import SocialScreen from './screens/SocialScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -12,6 +11,7 @@ import theme from './styles/theme';
 import type { RootTabParamList } from './types';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import MainTabBar from './components/MainTabBar';
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync();
@@ -80,37 +80,34 @@ const App: FC = () => {
       <StatusBar style="auto" />
       <Tab.Navigator
         screenOptions={{
-          tabBarActiveTintColor: theme.colors.primary,
-          tabBarInactiveTintColor: theme.colors.textSecondary,
           headerStyle: {
             backgroundColor: theme.colors.primary,
           },
           headerTintColor: theme.colors.white,
         }}
+        tabBar={(props) => {
+          const route = props.state.routes[props.state.index];
+          const routeName = getFocusedRouteNameFromRoute(route) ?? route.name;
+          // Hide tab bar on Board screen
+          if (routeName === 'Board') {
+            return null;
+          }
+          return <MainTabBar {...props} />;
+        }}
       >
         <Tab.Screen 
           name="Home" 
           component={HomeStackNavigator}
-          options={({ route }) => {
-            const routeName = getFocusedRouteNameFromRoute(route) ?? 'HomeMain';
-            return {
-              headerShown: false, // Header is handled by the stack navigator
-              tabBarLabel: 'Home',
-              tabBarIcon: ({ color, size }) => (
-                <Ionicons name="home" size={size} color={color} />
-              ),
-              tabBarStyle: routeName === 'Board' ? { display: 'none' } : undefined,
-            };
+          options={{
+            headerShown: false, // Header is handled by the stack navigator
           }}
         />
         <Tab.Screen 
           name="Social" 
           component={SocialScreen}
           options={{
-            tabBarLabel: 'Social',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="people" size={size} color={color} />
-            ),
+            headerShown: true,
+            title: 'Community',
           }}
         />
       </Tab.Navigator>

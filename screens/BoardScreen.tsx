@@ -6,10 +6,13 @@ import {
   Dimensions,
   Text,
   TouchableOpacity,
+  Image,
+  Alert,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import theme from '../styles/theme';
 import type { HomeStackParamList } from '../types';
@@ -18,9 +21,9 @@ type BoardScreenRouteProp = RouteProp<HomeStackParamList, 'Board'>;
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Infinite board dimensions (much larger than screen)
-const BOARD_WIDTH = SCREEN_WIDTH * 20;
-const BOARD_HEIGHT = SCREEN_HEIGHT * 20;
+// Board dimensions (less infinite)
+const BOARD_WIDTH = SCREEN_WIDTH * 5;
+const BOARD_HEIGHT = SCREEN_HEIGHT * 5;
 
 // Grid cell size (like Freeform's grid)
 const GRID_SIZE = 20;
@@ -67,6 +70,80 @@ const BoardScreen: FC = () => {
       console.error('Unexpected error:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+
+  async function requestPermissions() {
+    const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+    const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (cameraStatus !== 'granted' || mediaStatus !== 'granted') {
+      Alert.alert(
+        'Permissions Required',
+        'Sorry, we need camera and media library permissions to add photos!'
+      );
+      return false;
+    }
+    return true;
+  }
+
+  async function handlePhotoButton() {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    Alert.alert(
+      'Add Photo',
+      'Choose an option',
+      [
+        {
+          text: 'Camera',
+          onPress: takePhoto,
+        },
+        {
+          text: 'Photo Library',
+          onPress: pickImageFromLibrary,
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  }
+
+  async function takePhoto() {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 0.6,
+        exif: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        console.log('Photo taken:', result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    }
+  }
+
+  async function pickImageFromLibrary() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: false,
+        quality: 0.6,
+        exif: false,
+        selectionLimit: 1,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        console.log('Photo selected:', result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
     }
   }
 
@@ -141,6 +218,37 @@ const BoardScreen: FC = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Bottom Navigation Bar */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity style={styles.bottomBarIcon}>
+          <Image 
+            source={require('../assets/note.png')} 
+            style={styles.bottomBarIconImage}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomBarIcon}>
+          <Image 
+            source={require('../assets/voice.png')} 
+            style={styles.bottomBarIconImage}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomBarIcon}>
+          <Ionicons name="star" size={36} color={theme.colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomBarIcon} onPress={handlePhotoButton}>
+          <Image 
+            source={require('../assets/photo.png')} 
+            style={styles.bottomBarIconImage}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomBarIcon}>
+          <Ionicons name="ellipsis-horizontal" size={32} color={theme.colors.light} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -148,7 +256,7 @@ const BoardScreen: FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.backgroundSecondary,
+    backgroundColor: theme.colors.light,
   },
   header: {
     flexDirection: 'row',
@@ -193,7 +301,7 @@ const styles = StyleSheet.create({
     left: 0,
     width: BOARD_WIDTH,
     height: BOARD_HEIGHT,
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.light,
   },
   gridLine: {
     position: 'absolute',
@@ -235,6 +343,33 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginTop: theme.spacing.xs,
     textAlign: 'center',
+  },
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    backgroundColor: theme.colors.light, // Light blue background
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: 8,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    ...theme.shadows.md,
+  },
+  bottomBarIcon: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -8,
+  },
+  bottomBarIconImage: {
+    width: 36,
+    height: 36,
   },
 });
 

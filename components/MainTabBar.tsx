@@ -1,0 +1,161 @@
+import React, { FC } from "react";
+import { View, StyleSheet, TouchableOpacity, Image, Text } from "react-native";
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import theme from "../styles/theme";
+
+const MainTabBar: FC<BottomTabBarProps> = ({
+  state,
+  descriptors,
+  navigation,
+}) => {
+  const focusedRoute = state.routes[state.index];
+
+  const handlePress = (routeName: string) => {
+    const event = navigation.emit({
+      type: "tabPress",
+      target: routeName,
+      canPreventDefault: true,
+    });
+
+    if (!event.defaultPrevented) {
+      navigation.navigate(routeName as never);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.pill}>
+        {/* Home Tab */}
+        <TouchableOpacity
+          style={styles.tabButton}
+          onPress={() => handlePress("Home")}
+        >
+          <Image
+            source={
+              focusedRoute.name === "Home"
+                ? require("../assets/selected home.png")
+                : require("../assets/home.png")
+            }
+            style={styles.icon}
+            resizeMode="contain"
+          />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.label,
+              focusedRoute.name === "Home" && styles.labelActive,
+            ]}
+          >
+            Home
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.spacer} />
+
+        {/* Community Tab (Social) */}
+        <TouchableOpacity
+          style={styles.tabButton}
+          onPress={() => handlePress("Social")}
+        >
+          <Image
+            source={
+              focusedRoute.name === "Social"
+                ? require("../assets/selected community.png")
+                : require("../assets/community.png")
+            }
+            style={styles.icon}
+            resizeMode="contain"
+          />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.label,
+              focusedRoute.name === "Social" && styles.labelActive,
+            ]}
+          >
+            Community
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Center Add Button */}
+      <TouchableOpacity
+        style={styles.centerButton}
+        onPress={() => handlePress("Home")}
+      >
+        <Text style={styles.centerButtonText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 16,
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: theme.colors.white,
+    borderRadius: 999,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xs,
+    width: "80%",
+    maxWidth: 320,
+    marginBottom: 16,
+    ...theme.shadows.md,
+  },
+  tabButton: {
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    minWidth: 80,
+  },
+  spacer: {
+    width: 80,
+  },
+  icon: {
+    width: 30,
+    height: 30,
+    marginBottom: 4,
+  },
+  label: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    width: "100%",
+  },
+  labelActive: {
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.primary,
+  },
+  centerButton: {
+    position: "absolute",
+    bottom: 32,
+    alignSelf: "center",
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+    ...theme.shadows.lg,
+  },
+  centerButtonText: {
+    fontSize: 32,
+    color: theme.colors.white,
+    lineHeight: 32,
+  },
+});
+
+export default MainTabBar;
