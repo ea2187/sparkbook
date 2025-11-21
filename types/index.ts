@@ -7,6 +7,13 @@ export type RootTabParamList = {
 export type HomeStackParamList = {
   HomeMain: undefined;
   Board: { boardId: string };
+  AddNote: undefined;
+  AddAudio: undefined;
+  ImportFile: undefined;
+  AddMusic: undefined;
+  PhotoPicker: undefined;
+  AddPhotoDetails: { imageUri: string };
+  SparkDetails: { sparkId: string; boardId: string };
 };
 
 // Board Types
