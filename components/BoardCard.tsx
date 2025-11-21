@@ -84,6 +84,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.textPrimary,
+
   },
 });
 

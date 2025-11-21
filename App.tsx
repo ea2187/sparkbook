@@ -68,8 +68,8 @@ const App: FC = () => {
     const route = props.state.routes[props.state.index];
     const routeName = getFocusedRouteNameFromRoute(route) ?? "HomeMain";
     
-    // Hide tab bar completely when on Board screen
-    if (routeName === "Board") {
+    // Hide tab bar on Board, PhotoPicker, AddPhotoDetails, and SparkDetails screens
+    if (routeName === "Board" || routeName === "PhotoPicker" || routeName === "AddPhotoDetails" || routeName === "SparkDetails") {
       return null;
     }
     

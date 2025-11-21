@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -17,6 +19,7 @@ import theme from '../styles/theme';
 import { supabase } from '../lib/supabase';
 import { Board, HomeStackParamList } from '../types';
 import BoardPreviewCard from '../components/BoardPreviewCard';
+import BoardOptionsMenu from '../components/BoardOptionsMenu';
 
 type HomeScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'HomeMain'>;
 
@@ -27,6 +30,8 @@ const HomeScreen: FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newBoardName, setNewBoardName] = useState('');
+  const [showBoardOptions, setShowBoardOptions] = useState(false);
+  const [selectedBoard, setSelectedBoard] = useState<Board | null>(null);
 
   useEffect(() => {
     fetchBoards();
@@ -34,7 +39,7 @@ const HomeScreen: FC = () => {
 
   async function fetchBoards() {
     try {
-      const { data, error } = await supabase
+      const { data: boardsData, error } = await supabase
         .from('boards')
         .select('*')
         .order('created_at', { ascending: false });
@@ -42,9 +47,27 @@ const HomeScreen: FC = () => {
       if (error) {
         console.error('Error fetching boards:', error);
         Alert.alert('Error', 'Failed to load boards');
-      } else {
-        setBoards(data || []);
+        setLoading(false);
+        return;
       }
+
+      // Fetch preview images for each board (first 4 sparks)
+      const boardsWithPreviews = await Promise.all(
+        (boardsData || []).map(async (board) => {
+          const { data: sparks } = await supabase
+            .from('sparks')
+            .select('content_url')
+            .eq('board_id', board.id)
+            .limit(4);
+
+          return {
+            ...board,
+            thumbnail_urls: sparks?.map(s => s.content_url) || [],
+          };
+        })
+      );
+
+      setBoards(boardsWithPreviews);
     } catch (err) {
       console.error('Unexpected error:', err);
     } finally {
@@ -102,6 +125,27 @@ const HomeScreen: FC = () => {
 
   function handleBoardPress(board: Board) {
     navigation.navigate('Board', { boardId: board.id });
+  }
+
+  function handleBoardLongPress(board: Board) {
+    setSelectedBoard(board);
+    setShowBoardOptions(true);
+  }
+
+  function handleBoardDeleted() {
+    if (selectedBoard) {
+      setBoards(boards.filter(b => b.id !== selectedBoard.id));
+      setSelectedBoard(null);
+    }
+  }
+
+  function handleBoardRenamed(newName: string) {
+    if (selectedBoard) {
+      setBoards(boards.map(b => 
+        b.id === selectedBoard.id ? { ...b, name: newName } : b
+      ));
+      setSelectedBoard({ ...selectedBoard, name: newName });
+    }
   }
 
   return (
@@ -171,6 +215,7 @@ const HomeScreen: FC = () => {
               title={board.name}
               previewImages={board.thumbnail_urls}
               onPress={() => handleBoardPress(board)}
+              onLongPress={() => handleBoardLongPress(board)}
             />
           ))
         )}
@@ -183,8 +228,12 @@ const HomeScreen: FC = () => {
         animationType="fade"
         onRequestClose={handleCancelCreate}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>New Board</Text>
             <Text style={styles.modalSubtitle}>Enter board name:</Text>
             <TextInput
@@ -212,7 +261,20 @@ const HomeScreen: FC = () => {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
+
+      {/* Board Options Menu */}
+      {selectedBoard && (
+        <BoardOptionsMenu
+          visible={showBoardOptions}
+          onClose={() => setShowBoardOptions(false)}
+          boardId={selectedBoard.id}
+          boardName={selectedBoard.name}
+          onBoardDeleted={handleBoardDeleted}
+          onBoardRenamed={handleBoardRenamed}
+        />
+      )}
     </View>
   );
 };

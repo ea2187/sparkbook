@@ -1,7 +1,9 @@
-import React, { FC } from "react";
-import { View, StyleSheet, TouchableOpacity, Image, Text } from "react-native";
+import React, { FC, useState } from "react";
+import { View, StyleSheet, TouchableOpacity, Image, Text, Alert } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import * as ImagePicker from "expo-image-picker";
 import theme from "../styles/theme";
+import QuickAddMenu from "./QuickAddMenu";
 
 const MainTabBar: FC<BottomTabBarProps> = ({
   state,
@@ -9,6 +11,7 @@ const MainTabBar: FC<BottomTabBarProps> = ({
   navigation,
 }) => {
   const focusedRoute = state.routes[state.index];
+  const [menuVisible, setMenuVisible] = useState(false);
 
   const handlePress = (routeName: string) => {
     const event = navigation.emit({
@@ -20,6 +23,26 @@ const MainTabBar: FC<BottomTabBarProps> = ({
     if (!event.defaultPrevented) {
       navigation.navigate(routeName as never);
     }
+  };
+
+  const handleAddPhoto = () => {
+    (navigation as any).navigate("Home", { screen: "PhotoPicker" });
+  };
+
+  const handleAddNote = () => {
+    (navigation as any).navigate("Home", { screen: "AddNote" });
+  };
+
+  const handleAddAudio = () => {
+    (navigation as any).navigate("Home", { screen: "AddAudio" });
+  };
+
+  const handleImportFile = () => {
+    (navigation as any).navigate("Home", { screen: "ImportFile" });
+  };
+
+  const handleAddMusic = () => {
+    (navigation as any).navigate("Home", { screen: "AddMusic" });
   };
 
   return (
@@ -81,10 +104,21 @@ const MainTabBar: FC<BottomTabBarProps> = ({
       {/* Center Add Button */}
       <TouchableOpacity
         style={styles.centerButton}
-        onPress={() => handlePress("Home")}
+        onPress={() => setMenuVisible(true)}
       >
         <Text style={styles.centerButtonText}>+</Text>
       </TouchableOpacity>
+
+      {/* Quick Add Menu */}
+      <QuickAddMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        onAddPhoto={handleAddPhoto}
+        onAddNote={handleAddNote}
+        onAddAudio={handleAddAudio}
+        onImportFile={handleImportFile}
+        onAddMusic={handleAddMusic}
+      />
     </View>
   );
 };

@@ -14,12 +14,14 @@ interface BoardPreviewCardProps {
   title: string;
   previewImages?: string[];
   onPress: () => void;
+  onLongPress?: () => void;
 }
 
 const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
   title,
   previewImages = [],
   onPress,
+  onLongPress,
 }) => {
   // Use provided images or fallback to placeholders
   const displayImages = previewImages.length > 0 
@@ -30,6 +32,7 @@ const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
     <TouchableOpacity 
       style={styles.card}
       onPress={onPress}
+      onLongPress={onLongPress}
       activeOpacity={0.7}
     >
       {/* Preview thumbnails row */}
@@ -44,6 +47,9 @@ const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
           </View>
         ))}
       </View>
+
+      {/* Divider line */}
+      <View style={styles.divider} />
 
       {/* Board title */}
       <Text style={styles.title} numberOfLines={1}>
@@ -76,11 +82,16 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  divider: {
+    height: 1,
+    backgroundColor: '#E5E5E5',
+    marginVertical: 8,
+  },
   title: {
     fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.medium,
     color: theme.colors.textPrimary,
-    marginTop: 8,
+    marginTop: 4,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useState, useRef } from "react";
+import React, { FC, useEffect, useState, useRef, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -8,8 +8,9 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ActivityIndicator,
 } from "react-native";
-import { useRoute, useNavigation } from "@react-navigation/native";
+import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp, NavigationProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -39,14 +40,37 @@ const BoardScreen: FC = () => {
   const [sparks, setSparks] = useState<any[]>([]);
   const [selectedSparkId, setSelectedSparkId] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Refetch sparks when screen comes into focus (e.g., after editing spark details)
+  useFocusEffect(
+    useCallback(() => {
+      fetchSparks();
+    }, [boardId])
+  );
 
   // Load board + sparks
   useEffect(() => {
     fetchBoard();
     fetchSparks();
-  }, [boardId]);
+
+    // Listen for uploads and refetch when complete
+    const checkUploadStatus = setInterval(() => {
+      const isUploading = (global as any).__uploadingPhoto;
+      const wasUploading = uploading;
+      
+      setUploading(isUploading || false);
+      
+      // Refetch sparks when upload completes
+      if (wasUploading && !isUploading) {
+        fetchSparks();
+      }
+    }, 300);
+
+    return () => clearInterval(checkUploadStatus);
+  }, [boardId, uploading]);
 
   // Center canvas on initial load
   useEffect(() => {
@@ -111,6 +135,49 @@ const BoardScreen: FC = () => {
           console.error("❌ Failed to update spark position:", error);
         }
       });
+  }
+
+  // Handle tap to deselect
+  function handleSparkTap(id: string) {
+    setSelectedSparkId(null);
+  }
+
+  // Handle long press to view details
+  function handleSparkLongPress(id: string) {
+    navigation.navigate("SparkDetails", { sparkId: id, boardId });
+  }
+
+  async function handleDeleteSpark(id: string) {
+    // Remove from UI
+    setSparks(prev => prev.filter(s => s.id !== id));
+
+    // Delete from database
+    const { error } = await supabase.from("sparks").delete().eq("id", id);
+    
+    if (error) {
+      console.error("Failed to delete spark:", error);
+      Alert.alert("Error", "Failed to delete spark");
+      // Refetch to restore UI
+      fetchSparks();
+    }
+  }
+
+  // Handle resize
+  async function handleSparkResize(id: string, newWidth: number, newHeight: number) {
+    // Update UI
+    setSparks((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, width: newWidth, height: newHeight } : s))
+    );
+
+    // Update database
+    const { error } = await supabase
+      .from("sparks")
+      .update({ width: newWidth, height: newHeight })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Failed to update spark size:", error);
+    }
   }
 
   // ---- IMAGE PICKING & UPLOAD ----
@@ -191,13 +258,28 @@ const BoardScreen: FC = () => {
     <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate("HomeMain")}>
+        <TouchableOpacity onPress={() => navigation.navigate("HomeMain" as never)}>
           <Ionicons name="arrow-back" size={26} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{boardName}</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>{boardName}</Text>
+          {uploading && (
+            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
+          )}
+        </View>
         <View style={{ width: 40 }} />
       </View>
       <View style={{ height: 100 }} />
+      {/* UPLOADING OVERLAY */}
+      {uploading && (
+        <View style={styles.uploadingOverlay}>
+          <View style={styles.uploadingCard}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.uploadingText}>Uploading photo...</Text>
+          </View>
+        </View>
+      )}
+
       {/* INFINITE CANVAS */}
       <ScrollView
         ref={scrollViewRef}
@@ -228,17 +310,26 @@ const BoardScreen: FC = () => {
 
         {/* SPARKS */}
         <View style={styles.canvasContent}>
+          {/* Tap background to deselect */}
+          <TouchableOpacity
+            style={styles.canvasBackground}
+            activeOpacity={1}
+            onPress={() => setSelectedSparkId(null)}
+          />
+
           {sparks.map((spark) => (
             <DraggableSpark
-  key={spark.id + "-" + spark.x + "-" + spark.y}
-  spark={spark}
-  selected={selectedSparkId === spark.id}
-  onSelect={setSelectedSparkId}
-  onMoveEnd={handleSparkMove}
-  onDragStart={handleDragStart}
-  onDragEnd={handleDragEnd}
-/>
-
+              key={spark.id + "-" + spark.x + "-" + spark.y}
+              spark={spark}
+              selected={selectedSparkId === spark.id}
+              onSelect={setSelectedSparkId}
+              onMoveEnd={handleSparkMove}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onTap={handleSparkTap}
+              onLongPress={handleSparkLongPress}
+              onResize={handleSparkResize}
+            />
           ))}
 
           {/* EMPTY STATE */}
@@ -295,12 +386,16 @@ const styles = StyleSheet.create({
   right: 0,
 },
 
-  headerTitle: {
+  headerCenter: {
     position: "absolute",
     top: 55,
     left: 0,
     right: 0,
-    textAlign: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
     fontSize: 22,
     fontWeight: "600",
   },
@@ -310,6 +405,13 @@ const styles = StyleSheet.create({
   gridLineHorizontal: { width: BOARD_WIDTH, height: 0.5 },
   gridLineVertical: { height: BOARD_HEIGHT, width: 0.5 },
   canvasContent: { ...StyleSheet.absoluteFillObject },
+  canvasBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: BOARD_WIDTH,
+    height: BOARD_HEIGHT,
+  },
   emptyState: {
     position: "absolute",
     top: BOARD_HEIGHT / 2 - 100,
@@ -330,7 +432,7 @@ const styles = StyleSheet.create({
   bottomBar: {
     position: "absolute",
     bottom: 0,
-    height: 80,
+    height: 90,
     width: "100%",
     backgroundColor: "#fff",
     flexDirection: "row",
@@ -339,6 +441,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     elevation: 5,
+  
   },
   bottomBarIcon: {
     width: 44,
@@ -347,6 +450,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   bottomBarIconImage: { width: 36, height: 36 },
+  uploadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10000,
+  },
+  uploadingCard: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 20,
+    padding: 32,
+    alignItems: "center",
+    gap: 16,
+    ...theme.shadows.lg,
+  },
+  uploadingText: {
+    fontSize: 18,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+  },
 });
 
 export default BoardScreen;
