@@ -1,5 +1,5 @@
 import React, { FC } from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, TransitionPresets } from '@react-navigation/stack';
 import HomeScreen from '../screens/HomeScreen';
 import BoardScreen from '../screens/BoardScreen';
 import AddNoteScreen from '../screens/AddNoteScreen';
@@ -25,6 +25,9 @@ const HomeStackNavigator: FC = () => {
         headerTitleStyle: {
           fontFamily: 'Inter_600SemiBold',
         },
+        ...TransitionPresets.SlideFromRightIOS,
+        gestureDirection: 'horizontal',
+        gestureEnabled: true,
       }}
     >
       <Stack.Screen 
@@ -40,6 +43,7 @@ const HomeStackNavigator: FC = () => {
         component={BoardScreen}
         options={{
           headerShown: false,
+          animationTypeForReplace: 'push',
         }}
       />
       <Stack.Screen

@@ -258,12 +258,23 @@ const BoardScreen: FC = () => {
     <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.navigate("HomeMain" as never)}
-        >
-          <Ionicons name="arrow-back" size={26} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.leftHeaderContainer}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={26} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+          {/* UNDO/REDO BUTTONS */}
+          <View style={styles.undoRedoContainer}>
+            <TouchableOpacity style={styles.undoRedoButton}>
+              <Ionicons name="arrow-undo" size={22} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.undoRedoButton}>
+              <Ionicons name="arrow-redo" size={22} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+        </View>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{boardName}</Text>
           {uploading && (
@@ -271,16 +282,6 @@ const BoardScreen: FC = () => {
           )}
         </View>
         <View style={{ width: 40 }} />
-      </View>
-
-      {/* UNDO/REDO BUTTONS */}
-      <View style={styles.undoRedoContainer}>
-        <TouchableOpacity style={styles.undoRedoButton}>
-          <Ionicons name="arrow-undo" size={22} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.undoRedoButton}>
-          <Ionicons name="arrow-redo" size={22} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
       </View>
 
       {/* ORGANIZE BUTTON */}
@@ -407,6 +408,15 @@ const styles = StyleSheet.create({
   right: 0,
 },
 
+  leftHeaderContainer: {
+    position: "absolute",
+    top: 55,
+    left: 20,
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 8,
+    zIndex: 10001,
+  },
   backButton: {
     zIndex: 10001,
   },
@@ -454,10 +464,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   undoRedoContainer: {
-    position: "absolute",
-    top: 55,
-    right: 70,
-    flexDirection: "row",
+    flexDirection: "column",
     gap: 8,
     zIndex: 10001,
   },
