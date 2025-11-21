@@ -228,8 +228,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.sm,
-    backgroundColor: theme.colors.white,
+    
     gap: theme.spacing.sm,
+  marginTop: '15%'
   },
   searchContainer: {
     flex: 1,
@@ -239,6 +240,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.round,
     paddingHorizontal: theme.spacing.md,
     height: 44,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   searchIcon: {
     marginRight: theme.spacing.sm,
@@ -263,7 +266,7 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     maxHeight: 80,
-    backgroundColor: theme.colors.white,
+    
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
@@ -296,6 +299,8 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.borderRadius.md,
     gap: theme.spacing.xs,
+  borderWidth: 1,
+  borderColor: theme.colors.border,
   },
   filterButtonText: {
     color: theme.colors.textSecondary,

@@ -25,6 +25,7 @@ const HomeStackNavigator: FC = () => {
         component={HomeScreen}
         options={{
           title: 'Home',
+          headerShown: false,
         }}
       />
       <Stack.Screen

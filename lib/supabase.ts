@@ -12,10 +12,22 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
-// Auto-login for development
-if (DEV_ACCESS_TOKEN && DEV_REFRESH_TOKEN) {
-  supabase.auth.setSession({
-    access_token: DEV_ACCESS_TOKEN,
-    refresh_token: DEV_REFRESH_TOKEN,
-  });
-}
+// Auto-login helper for development
+export const initDevSession = async () => {
+  if (DEV_ACCESS_TOKEN && DEV_REFRESH_TOKEN) {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: DEV_ACCESS_TOKEN,
+      refresh_token: DEV_REFRESH_TOKEN,
+    });
+    
+    if (error) {
+      console.error('Auto-login error:', error);
+    } else {
+      console.log('✅ Dev session initialized:', data.session?.user?.email);
+    }
+    
+    return data.session;
+  }
+  console.log('⚠️ No dev tokens found, skipping auto-login');
+  return null;
+};

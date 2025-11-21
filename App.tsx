@@ -1,17 +1,20 @@
 import React, { FC, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer, getFocusedRouteNameFromRoute } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
+import { Ionicons } from '@expo/vector-icons';
 import HomeStackNavigator from './navigators/HomeStackNavigator';
 import SocialScreen from './screens/SocialScreen';
 import LoginScreen from './screens/LoginScreen';
 import theme from './styles/theme';
 import type { RootTabParamList } from './types';
 import { supabase } from './lib/supabase';
-import type { User } from '@supabase/supabase-js';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import MainTabBar from './components/MainTabBar';
+
+
 
 // Keep splash screen visible while loading fonts
 SplashScreen.preventAutoHideAsync();
@@ -25,8 +28,8 @@ const App: FC = () => {
     Inter_600SemiBold,
     Inter_700Bold,
   });
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -34,83 +37,61 @@ const App: FC = () => {
     }
   }, [fontsLoaded]);
 
-  // Check auth status on mount and listen for changes
+  // Check if user is already logged in
   useEffect(() => {
-    // Check initial auth state
     const checkAuth = async () => {
-      const { data } = await supabase.auth.getUser();
-      setUser(data.user);
-      setLoading(false);
+      const { data } = await supabase.auth.getSession();
+      setIsAuthenticated(!!data.session);
+      setAuthChecked(true);
+      console.log('Current logged user:', data.session?.user);
     };
     checkAuth();
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const handleLoginSuccess = () => {
-    // Auth state will be updated via the listener
-    setLoading(false);
+    setIsAuthenticated(true);
   };
 
-  if (!fontsLoaded || loading) {
+  if (!fontsLoaded || !authChecked) {
     return null;
   }
 
-  // Show login screen if not authenticated
-  if (!user) {
-    return (
-      <>
-        <StatusBar style="auto" />
-        <LoginScreen onLoginSuccess={handleLoginSuccess} />
-      </>
-    );
+  if (!isAuthenticated) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // Show main app if authenticated
   return (
     <NavigationContainer>
       <StatusBar style="auto" />
       <Tab.Navigator
-        screenOptions={{
-          headerStyle: {
-            backgroundColor: theme.colors.primary,
-          },
-          headerTintColor: theme.colors.white,
-        }}
-        tabBar={(props) => {
-          const route = props.state.routes[props.state.index];
-          const routeName = getFocusedRouteNameFromRoute(route) ?? route.name;
-          // Hide tab bar on Board screen
-          if (routeName === 'Board') {
-            return null;
-          }
-          return <MainTabBar {...props} />;
-        }}
-      >
-        <Tab.Screen 
-          name="Home" 
-          component={HomeStackNavigator}
-          options={{
-            headerShown: false, // Header is handled by the stack navigator
-          }}
-        />
-        <Tab.Screen 
-          name="Social" 
-          component={SocialScreen}
-          options={{
-            headerShown: true,
-            title: 'Community',
-          }}
-        />
-      </Tab.Navigator>
+  tabBar={(props) => {
+    const route = props.state.routes[props.state.index];
+    const routeName = getFocusedRouteNameFromRoute(route) ?? "HomeMain";
+    
+    // Hide tab bar completely when on Board screen
+    if (routeName === "Board") {
+      return null;
+    }
+    
+    return <MainTabBar {...props} />;
+  }}
+  screenOptions={{
+    headerShown: false,
+  }}
+>
+<Tab.Screen
+  name="Home"
+  component={HomeStackNavigator}
+  options={{
+    headerShown: false,
+  }}
+/>
+  <Tab.Screen 
+    name="Social" 
+    component={SocialScreen}
+  />
+</Tab.Navigator>
+
     </NavigationContainer>
   );
 };
