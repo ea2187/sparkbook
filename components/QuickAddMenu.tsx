@@ -247,6 +247,7 @@ const styles = StyleSheet.create({
   menuIcon: {
     width: 28,
     height: 28,
+    resizeMode: "contain",
   },
   menuItemText: {
     flex: 1,

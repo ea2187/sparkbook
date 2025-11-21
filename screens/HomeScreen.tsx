@@ -156,7 +156,7 @@ const HomeScreen: FC = () => {
           <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search boards..."
+            placeholder="Search..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor={theme.colors.textSecondary}
@@ -178,7 +178,7 @@ const HomeScreen: FC = () => {
       >
         <Pressable style={styles.addButton} onPress={handleAddSparklette}>
           <Ionicons name="add" size={20} color={theme.colors.white} />
-          <Text style={styles.addButtonText}>Add sparklette</Text>
+          <Text style={styles.addButtonText}>Add Sparklette</Text>
         </Pressable>
 
         <Pressable style={styles.filterButton}>
@@ -234,11 +234,11 @@ const HomeScreen: FC = () => {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>New Board</Text>
-            <Text style={styles.modalSubtitle}>Enter board name:</Text>
+            <Text style={styles.modalTitle}>New Sparklette</Text>
+            <Text style={styles.modalSubtitle}>Enter Sparklette Name:</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Board name"
+              placeholder="Name"
               placeholderTextColor={theme.colors.textLight}
               value={newBoardName}
               onChangeText={setNewBoardName}

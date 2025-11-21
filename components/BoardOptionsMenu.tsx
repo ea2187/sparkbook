@@ -63,8 +63,8 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
 
   function handleDeletePress() {
     Alert.alert(
-      "Delete Board",
-      `Are you sure you want to delete "${boardName}"? This will also delete all sparks on this board.`,
+      "Delete Sparklette",
+      `Are you sure you want to delete "${boardName}"? This action cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -111,7 +111,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
           <View style={styles.overlay}>
             <View style={styles.menuContainer}>
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>Board Options</Text>
+              <Text style={styles.headerTitle}>Sparklette Options</Text>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                 <Ionicons name="close" size={28} color={theme.colors.textSecondary} />
               </TouchableOpacity>
@@ -123,7 +123,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
                   style={styles.input}
                   value={newName}
                   onChangeText={setNewName}
-                  placeholder="Board name"
+                  placeholder="Sparklette name"
                   autoFocus
                   editable={!loading}
                 />
@@ -159,7 +159,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
                   disabled={loading}
                 >
                   <Ionicons name="create-outline" size={24} color={theme.colors.primary} />
-                  <Text style={styles.menuItemText}>Rename Board</Text>
+                  <Text style={styles.menuItemText}>Rename Sparklette</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -169,7 +169,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
                 >
                   <Ionicons name="trash-outline" size={24} color="#EF4444" />
                   <Text style={[styles.menuItemText, { color: "#EF4444" }]}>
-                    Delete Board
+                    Delete Sparklette
                   </Text>
                 </TouchableOpacity>
               </View>
