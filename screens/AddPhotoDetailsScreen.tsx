@@ -207,7 +207,7 @@ const AddPhotoDetailsScreen: FC = () => {
           onPress={handleContinue}
           disabled={loadingBoards || boards.length === 0}
         >
-          <Text style={styles.continueButtonText}>Add to Board</Text>
+          <Text style={styles.continueButtonText}>Add</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

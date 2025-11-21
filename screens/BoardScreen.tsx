@@ -269,6 +269,24 @@ const BoardScreen: FC = () => {
         </View>
         <View style={{ width: 40 }} />
       </View>
+
+      {/* UNDO/REDO BUTTONS */}
+      <View style={styles.undoRedoContainer}>
+        <TouchableOpacity style={styles.undoRedoButton}>
+          <Ionicons name="arrow-undo" size={22} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.undoRedoButton}>
+          <Ionicons name="arrow-redo" size={22} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* ORGANIZE BUTTON */}
+      <View style={styles.organizeContainer}>
+        <TouchableOpacity style={styles.organizeButton}>
+          <Ionicons name="sparkles" size={22} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
+
       <View style={{ height: 100 }} />
       {/* UPLOADING OVERLAY */}
       {uploading && (
@@ -429,6 +447,38 @@ const styles = StyleSheet.create({
     color: "#777",
     marginTop: 4,
   },
+  undoRedoContainer: {
+    position: "absolute",
+    top: 100,
+    left: 20,
+    flexDirection: "row",
+    gap: 8,
+    zIndex: 100,
+  },
+  undoRedoButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: theme.colors.white,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    ...theme.shadows.md,
+  },
+  organizeContainer: {
+    position: "absolute",
+    top: 100,
+    right: 20,
+    zIndex: 100,
+  },
+  organizeButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: theme.colors.white,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    ...theme.shadows.md,
+  },
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -449,7 +499,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  bottomBarIconImage: { width: 36, height: 36 },
+  bottomBarIconImage: { 
+    width: 36, 
+    height: 36,
+    resizeMode: "contain",
+  },
   uploadingOverlay: {
     position: "absolute",
     top: 0,
