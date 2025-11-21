@@ -132,6 +132,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingBottom: 16,
+    overflow: "visible",
   },
   pill: {
     flexDirection: "row",
@@ -141,9 +142,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
     width: "80%",
     maxWidth: 320,
     marginBottom: 16,
+    overflow: "visible",
     ...theme.shadows.md,
   },
   tabButton: {
@@ -152,6 +156,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flex: 1,
     minWidth: 80,
+    paddingVertical: 4,
+    overflow: "visible",
   },
   spacer: {
     width: 80,

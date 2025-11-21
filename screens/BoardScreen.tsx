@@ -258,7 +258,10 @@ const BoardScreen: FC = () => {
     <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate("HomeMain" as never)}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.navigate("HomeMain" as never)}
+        >
           <Ionicons name="arrow-back" size={26} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -404,6 +407,9 @@ const styles = StyleSheet.create({
   right: 0,
 },
 
+  backButton: {
+    zIndex: 10001,
+  },
   headerCenter: {
     position: "absolute",
     top: 55,
@@ -449,11 +455,11 @@ const styles = StyleSheet.create({
   },
   undoRedoContainer: {
     position: "absolute",
-    top: 100,
-    left: 20,
+    top: 55,
+    right: 70,
     flexDirection: "row",
     gap: 8,
-    zIndex: 100,
+    zIndex: 10001,
   },
   undoRedoButton: {
     width: 40,
@@ -466,9 +472,9 @@ const styles = StyleSheet.create({
   },
   organizeContainer: {
     position: "absolute",
-    top: 100,
+    top: 55,
     right: 20,
-    zIndex: 100,
+    zIndex: 10001,
   },
   organizeButton: {
     width: 40,
@@ -498,6 +504,8 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: "center",
     alignItems: "center",
+    overflow: "visible",
+    padding: 4,
   },
   bottomBarIconImage: { 
     width: 36, 

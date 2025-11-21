@@ -317,6 +317,7 @@ const styles = StyleSheet.create({
   avatarButton: {
     width: 44,
     height: 44,
+    overflow: 'visible',
   },
   avatar: {
     width: 44,
@@ -325,6 +326,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   actionRow: {
     maxHeight: 80,
