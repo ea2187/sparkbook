@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
@@ -40,6 +41,11 @@ const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
   const [title, setTitle] = useState('');
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  
+  // Animation values for audio waves
+  const waveAnimations = useRef(
+    Array.from({ length: 5 }, () => new Animated.Value(0.3))
+  ).current;
 
   useEffect(() => {
     if (visible) {
@@ -75,6 +81,38 @@ const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
       }, 1000);
     }
     return () => clearInterval(interval);
+  }, [recording]);
+
+  // Animate waves when recording
+  useEffect(() => {
+    if (recording) {
+      // Create staggered animations for each wave
+      const animations = waveAnimations.map((anim, index) => {
+        return Animated.loop(
+          Animated.sequence([
+            Animated.delay(index * 100),
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim, {
+              toValue: 0.3,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ])
+        );
+      });
+      
+      Animated.parallel(animations).start();
+    } else {
+      // Reset waves when not recording
+      waveAnimations.forEach(anim => {
+        anim.setValue(0.3);
+        anim.stopAnimation();
+      });
+    }
   }, [recording]);
 
   async function initializeAudio() {
@@ -224,48 +262,79 @@ const AudioRecorderModal: React.FC<AudioRecorderModalProps> = ({
 
           {/* Recording Interface */}
           <View style={styles.recordingSection}>
-            <View style={[styles.micIcon, recording && styles.micIconRecording]}>
-              <Ionicons 
-                name={recording ? 'mic' : 'mic-outline'} 
-                size={60} 
-                color={recording ? '#EF4444' : theme.colors.primary} 
-              />
-            </View>
+            {recording && (
+              <View style={styles.wavesContainer}>
+                {waveAnimations.map((anim, index) => (
+                  <Animated.View
+                    key={index}
+                    style={[
+                      styles.waveBar,
+                      {
+                        transform: [
+                          {
+                            scaleY: anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.3, 1],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
 
-            <Text style={styles.statusText}>
-              {recording 
-                ? 'Recording...' 
-                : audioUri 
-                  ? 'Recording complete!' 
-                  : 'Ready to record'}
-            </Text>
+            {!recording && !audioUri && (
+              <TouchableOpacity
+                style={styles.recordButton}
+                onPress={startRecording}
+                disabled={uploading}
+              >
+                <Ionicons
+                  name="mic"
+                  size={80}
+                  color={theme.colors.white}
+                />
+              </TouchableOpacity>
+            )}
+
+            {(recording || audioUri) && (
+              <Text style={styles.statusText}>
+                {recording 
+                  ? 'Recording...' 
+                  : 'Recording complete!'}
+              </Text>
+            )}
 
             {recording && (
               <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
             )}
 
-            <TouchableOpacity
-              style={[styles.recordButton, recording && styles.recordButtonActive]}
-              onPress={recording ? stopRecording : startRecording}
-              disabled={uploading}
-            >
-              <Ionicons
-                name={recording ? 'square' : 'mic'}
-                size={32}
-                color={theme.colors.white}
-              />
-            </TouchableOpacity>
+            {recording && (
+              <TouchableOpacity
+                style={styles.stopButton}
+                onPress={stopRecording}
+                disabled={uploading}
+              >
+                <Ionicons
+                  name="square"
+                  size={32}
+                  color={theme.colors.white}
+                />
+              </TouchableOpacity>
+            )}
 
             {audioUri && !recording && (
-              <View style={styles.postRecordingButtons}>
+              <View style={styles.postRecordingContainer}>
                 <TouchableOpacity
-                  style={styles.playButton}
+                  style={styles.playButtonLarge}
                   onPress={togglePlayback}
                   disabled={uploading}
                 >
                   <Ionicons 
                     name={isPlaying ? "pause" : "play"} 
-                    size={24} 
+                    size={32} 
                     color={theme.colors.white} 
                   />
                 </TouchableOpacity>
@@ -329,7 +398,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 40,
-    maxHeight: '90%',
+    height: SCREEN_HEIGHT * 0.5,
   },
   header: {
     flexDirection: 'row',
@@ -348,26 +417,30 @@ const styles = StyleSheet.create({
   },
   recordingSection: {
     alignItems: 'center',
-    paddingVertical: 40,
+    justifyContent: 'center',
+    flex: 1,
     paddingHorizontal: 32,
   },
-  micIcon: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#E8EFFF',
+  wavesContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    height: 80,
     marginBottom: 24,
+    gap: 6,
   },
-  micIconRecording: {
-    backgroundColor: '#FEE2E2',
+  waveBar: {
+    width: 8,
+    height: 60,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 4,
   },
   statusText: {
     fontSize: 18,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.textPrimary,
     marginBottom: 8,
+    textAlign: 'center',
   },
   durationText: {
     fontSize: 32,
@@ -376,6 +449,28 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   recordButton: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...theme.shadows.lg,
+  },
+  stopButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...theme.shadows.lg,
+  },
+  postRecordingContainer: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  playButtonLarge: {
     width: 80,
     height: 80,
     borderRadius: 40,
@@ -384,29 +479,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...theme.shadows.lg,
   },
-  recordButtonActive: {
-    backgroundColor: '#EF4444',
-  },
-  postRecordingButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginTop: 16,
-  },
-  playButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...theme.shadows.md,
-  },
   reRecordButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
     paddingHorizontal: 16,
   },
   reRecordText: {
@@ -416,18 +491,18 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: 20,
-    marginTop: 24,
+    marginTop: 0,
   },
   label: {
     fontSize: 14,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.textPrimary,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   titleInput: {
     backgroundColor: theme.colors.light,
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     fontSize: 16,
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textPrimary,
@@ -436,7 +511,8 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   addButton: {
     backgroundColor: theme.colors.primary,

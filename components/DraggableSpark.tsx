@@ -309,6 +309,17 @@ export default function DraggableSpark({
                   <Ionicons name="pause-circle" size={48} color="rgba(255,255,255,0.9)" />
                 </View>
               )}
+              {/* Song name and artist overlay at bottom */}
+              <View style={styles.songNameOverlay}>
+                <Text style={styles.songNameText} numberOfLines={1}>
+                  {spark.title}
+                </Text>
+                {metadata.artists && (
+                  <Text style={styles.artistNameText} numberOfLines={1}>
+                    {metadata.artists}
+                  </Text>
+                )}
+              </View>
             </View>
           );
         } else if (isMusic && displayMode === 'text') {
@@ -452,6 +463,30 @@ const styles = StyleSheet.create({
   musicArtist: {
     fontSize: 11,
     color: "#A78BFA",
+    textAlign: "center",
+  },
+  songNameOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  songNameText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 2,
+  },
+  artistNameText: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 10,
+    fontWeight: "400",
     textAlign: "center",
   },
 });
