@@ -20,6 +20,11 @@ import type { HomeStackParamList } from "../types";
 import { uploadImageAsync } from "../lib/uploadImage";
 import { createSpark } from "../lib/createSpark";
 import DraggableSpark from "../components/DraggableSpark";
+import NoteComposerModal from '../components/NoteComposerModal';
+import { createNoteSpark } from '../lib/createNoteSpark';
+import QuickAddMenu from '../components/QuickAddMenu';
+import AudioRecorderModal from '../components/AudioRecorderModal'; 
+
 
 // ROUTE TYPES
 type BoardScreenRouteProp = RouteProp<HomeStackParamList, "Board">;
@@ -41,6 +46,10 @@ const BoardScreen: FC = () => {
   const [selectedSparkId, setSelectedSparkId] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [quickAddVisible, setQuickAddVisible] = useState(false);
+  const [noteModalVisible, setNoteModalVisible] = useState(false);
+  const [audioModalVisible, setAudioModalVisible] = useState(false);
+
 
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -350,7 +359,6 @@ const BoardScreen: FC = () => {
               onDragEnd={handleDragEnd}
               onTap={handleSparkTap}
               onLongPress={handleSparkLongPress}
-              onResize={handleSparkResize}
             />
           ))}
 
@@ -367,16 +375,19 @@ const BoardScreen: FC = () => {
 
       {/* BOTTOM BAR */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomBarIcon}>
+        <TouchableOpacity style={styles.bottomBarIcon} onPress ={() => setNoteModalVisible(true)}>
           <Image source={require("../assets/note.png")} style={styles.bottomBarIconImage} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomBarIcon}>
+        <TouchableOpacity style={styles.bottomBarIcon} onPress={() => setAudioModalVisible(true)}>
           <Image source={require("../assets/voice.png")} style={styles.bottomBarIconImage} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomBarIcon}>
-          <Ionicons name="star" size={36} color={theme.colors.primary} />
+        <TouchableOpacity 
+          style={styles.bottomBarIcon} 
+          onPress={() => navigation.navigate('AddMusic', { boardId })}
+        >
+          <Ionicons name="musical-notes" size={32} color={theme.colors.primary} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.bottomBarIcon} onPress={handlePhotoButton}>
@@ -387,6 +398,33 @@ const BoardScreen: FC = () => {
           <Ionicons name="ellipsis-horizontal" size={32} color={theme.colors.light} />
         </TouchableOpacity>
       </View>
+
+      <NoteComposerModal
+  visible={noteModalVisible}
+  onClose={() => setNoteModalVisible(false)}
+  onSubmit={async (title, text) => {
+    // spawn near center like photos
+    const spawnX = BOARD_WIDTH / 2 - 80 + (Math.random() * 120 - 60);
+    const spawnY = BOARD_HEIGHT / 2 - 80 + (Math.random() * 120 - 60);
+
+    const spark = await createNoteSpark(boardId, title, text, spawnX, spawnY);
+    if (spark) {
+      setSparks(prev => [...prev, spark]);
+    }
+    setNoteModalVisible(false);
+  }}
+/>
+
+      <AudioRecorderModal
+        visible={audioModalVisible}
+        onClose={() => setAudioModalVisible(false)}
+        boardId={boardId}
+        onAudioCreated={(spark: any) => {
+          setSparks(prev => [...prev, spark]);
+          setAudioModalVisible(false);
+        }}
+      />
+
     </View>
   );
 };

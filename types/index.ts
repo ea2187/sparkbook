@@ -10,7 +10,8 @@ export type HomeStackParamList = {
   AddNote: undefined;
   AddAudio: undefined;
   ImportFile: undefined;
-  AddMusic: undefined;
+  AddMusic: { boardId?: string };
+  AddMusicDetails: { track: any; boardId: string };
   PhotoPicker: undefined;
   AddPhotoDetails: { imageUri: string };
   SparkDetails: { sparkId: string; boardId: string };

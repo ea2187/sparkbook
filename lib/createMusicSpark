@@ -1,0 +1,34 @@
+import { supabase } from "./supabase";
+
+export async function createMusicSpark(
+  boardId: string,
+  track: { id: string; name: string; artist: string; uri?: string }
+) {
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData.user;
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("sparks")
+    .insert({
+      board_id: boardId,
+      user_id: user.id,
+      type: "music",
+      text_content: `${track.name} — ${track.artist}`,
+      meta: {
+        spotify_track_id: track.id,
+        spotify_uri: track.uri ?? null,
+      },
+      x: 200,
+      y: 200,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating music spark:", error);
+    return null;
+  }
+
+  return data;
+}

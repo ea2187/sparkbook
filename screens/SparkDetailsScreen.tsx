@@ -1,4 +1,4 @@
-import React, { FC, useState, useCallback } from "react";
+import React, { FC, useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,10 +12,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Linking,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { HomeStackParamList } from "../types";
 import { Ionicons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
 import { supabase } from "../lib/supabase";
 import theme from "../styles/theme";
 import { useFocusEffect } from "@react-navigation/native";
@@ -34,12 +36,22 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
   const [deleting, setDeleting] = useState(false);
   const [resizing, setResizing] = useState(false);
   const [tempSize, setTempSize] = useState({ width: 160, height: 160 });
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       fetchSpark();
     }, [sparkId])
   );
+
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
 
   async function fetchSpark() {
     setLoading(true);
@@ -138,6 +150,82 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
     setTempSize({ width: 160, height: 160 });
   }
 
+  async function toggleAudioPlayback() {
+    if (!spark?.content_url) return;
+
+    // Check if this is a music spark
+    let isMusic = false;
+    let spotifyUri = null;
+    let spotifyUrl = null;
+    try {
+      if (spark.text_content && spark.text_content.startsWith('{')) {
+        const metadata = JSON.parse(spark.text_content);
+        isMusic = true;
+        spotifyUri = metadata.spotifyUri;
+        spotifyUrl = metadata.spotifyUrl || spark.content_url;
+      }
+    } catch (e) {
+      // Not music
+    }
+
+    // Open music in Spotify
+    if (isMusic) {
+      try {
+        if (spotifyUri) {
+          const canOpen = await Linking.canOpenURL(spotifyUri);
+          if (canOpen) {
+            await Linking.openURL(spotifyUri);
+            return;
+          }
+        }
+        if (spotifyUrl) {
+          await Linking.openURL(spotifyUrl);
+        }
+      } catch (error) {
+        console.error('Error opening Spotify:', error);
+        Alert.alert('Error', 'Could not open Spotify');
+      }
+      return;
+    }
+
+    // Play voice recording
+    try {
+      if (sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded && status.isPlaying) {
+          await sound.pauseAsync();
+          setIsPlaying(false);
+        } else if (status.isLoaded) {
+          await sound.playAsync();
+          setIsPlaying(true);
+        }
+      } else {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+        });
+
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: spark.content_url },
+          { shouldPlay: true },
+          (status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          }
+        );
+
+        setSound(newSound);
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      Alert.alert('Error', 'Could not play audio');
+      setIsPlaying(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -179,14 +267,101 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Image */}
-        <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: spark.content_url }}
-          style={styles.image}
-          resizeMode="contain"
-        />
-      </View>
+        {/* Content Preview */}
+        {spark.type === 'image' && (
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: spark.content_url }}
+              style={styles.image}
+              resizeMode="contain"
+            />
+          </View>
+        )}
+
+        {spark.type === 'note' && (
+          <View style={styles.noteContainer}>
+            <View style={styles.noteCard}>
+              {spark.title && (
+                <Text style={styles.noteTitle}>{spark.title}</Text>
+              )}
+              {spark.text_content && (
+                <Text style={styles.noteBody}>{spark.text_content}</Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {spark.type === 'audio' && (() => {
+          // Parse metadata if music
+          let metadata = null;
+          let isMusic = false;
+          try {
+            if (spark.text_content && spark.text_content.startsWith('{')) {
+              metadata = JSON.parse(spark.text_content);
+              isMusic = true;
+            }
+          } catch (e) {
+            // Voice recording
+          }
+
+          if (isMusic) {
+            const displayMode = metadata?.displayMode || 'album';
+            return (
+              <View style={styles.audioContainer}>
+                <View style={styles.musicPreview}>
+                  {displayMode === 'album' && metadata.albumImage ? (
+                    <Image
+                      source={{ uri: metadata.albumImage }}
+                      style={styles.albumArt}
+                    />
+                  ) : (
+                    <View style={styles.musicTextPreview}>
+                      <Ionicons name="musical-notes" size={48} color="#8B5CF6" />
+                      <Text style={styles.musicTitle}>{spark.title}</Text>
+                      {metadata.artists && (
+                        <Text style={styles.musicArtist}>{metadata.artists}</Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.spotifyButton}
+                  onPress={toggleAudioPlayback}
+                >
+                  <Ionicons name="logo-spotify" size={24} color="#FFF" />
+                  <Text style={styles.spotifyButtonText}>Open in Spotify</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          } else {
+            // Voice recording
+            return (
+              <View style={styles.audioContainer}>
+                <View style={styles.voicePreview}>
+                  <Ionicons
+                    name={isPlaying ? "pause-circle" : "mic-circle"}
+                    size={80}
+                    color="#10B981"
+                  />
+                  <Text style={styles.voiceLabel}>{spark.title || 'Audio Recording'}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.playButton}
+                  onPress={toggleAudioPlayback}
+                >
+                  <Ionicons
+                    name={isPlaying ? "pause" : "play"}
+                    size={24}
+                    color="#FFF"
+                  />
+                  <Text style={styles.playButtonText}>
+                    {isPlaying ? 'Pause' : 'Play'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }
+        })()}
 
       {/* Name Section */}
       <View style={styles.nameSection}>
@@ -365,6 +540,112 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: "100%",
+  },
+  noteContainer: {
+    padding: 20,
+    backgroundColor: "#F5F5F5",
+    minHeight: 200,
+  },
+  noteCard: {
+    backgroundColor: "#FFFBEA",
+    borderRadius: 14,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#FACC15",
+    minHeight: 160,
+  },
+  noteTitle: {
+    fontSize: 20,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+    marginBottom: 12,
+  },
+  noteBody: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+    lineHeight: 24,
+  },
+  audioContainer: {
+    padding: 20,
+    backgroundColor: "#F5F5F5",
+    alignItems: "center",
+    gap: 20,
+  },
+  voicePreview: {
+    alignItems: "center",
+    gap: 16,
+    paddingVertical: 40,
+  },
+  voiceLabel: {
+    fontSize: 18,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: "#10B981",
+  },
+  playButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#10B981",
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
+    ...theme.shadows.md,
+  },
+  playButtonText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: "#FFF",
+  },
+  musicPreview: {
+    width: 240,
+    height: 240,
+    borderRadius: 16,
+    overflow: "hidden",
+    ...theme.shadows.lg,
+  },
+  albumArt: {
+    width: "100%",
+    height: "100%",
+  },
+  musicTextPreview: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#FAF5FF",
+    borderWidth: 2,
+    borderColor: "#8B5CF6",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    gap: 12,
+  },
+  musicTitle: {
+    fontSize: 18,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: "#8B5CF6",
+    textAlign: "center",
+  },
+  musicArtist: {
+    fontSize: 14,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: "#A78BFA",
+    textAlign: "center",
+  },
+  spotifyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#1DB954",
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
+    ...theme.shadows.md,
+  },
+  spotifyButtonText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: "#FFF",
   },
   nameSection: {
     padding: 20,
