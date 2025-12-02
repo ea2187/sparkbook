@@ -6,6 +6,7 @@ import AddNoteScreen from '../screens/AddNoteScreen';
 import AddAudioScreen from '../screens/AddAudioScreen';
 import ImportFileScreen from '../screens/ImportFileScreen';
 import AddMusicScreen from '../screens/AddMusicScreen';
+import AddMusicDetailsScreen from '../screens/AddMusicDetailsScreen';
 import PhotoPickerScreen from '../screens/PhotoPickerScreen';
 import AddPhotoDetailsScreen from '../screens/AddPhotoDetailsScreen';
 import SparkDetailsScreen from '../screens/SparkDetailsScreen';
@@ -66,6 +67,13 @@ const HomeStackNavigator: FC = () => {
       <Stack.Screen
         name="AddMusic"
         component={AddMusicScreen}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="AddMusicDetails"
+        component={AddMusicDetailsScreen}
         options={{
           headerShown: false,
         }}
