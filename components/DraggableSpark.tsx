@@ -24,6 +24,7 @@ type DraggableSparkProps = {
   onDragEnd?: () => void;
   onTap?: (id: string) => void;
   onLongPress?: (id: string) => void;
+  onDelete?: (id: string) => void;
 };
 
 export default function DraggableSpark({
@@ -36,6 +37,7 @@ export default function DraggableSpark({
   onDragEnd,
   onTap,
   onLongPress,
+  onDelete,
 }: DraggableSparkProps) {
   const isDraggingRef = useRef(false);
   const isResizingRef = useRef(false);
@@ -67,6 +69,8 @@ export default function DraggableSpark({
     height: spark.height || 160,
   });
   const [cropMode, setCropMode] = useState(false);
+  const [isNew, setIsNew] = useState(false);
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   // Update size when spark prop changes
   useEffect(() => {
@@ -74,6 +78,34 @@ export default function DraggableSpark({
       setSize({ width: spark.width, height: spark.height });
     }
   }, [spark.width, spark.height]);
+
+  // Check if spark is newly created (within last 3 seconds)
+  useEffect(() => {
+    const createdAt = new Date(spark.created_at).getTime();
+    const now = Date.now();
+    const isNewSpark = now - createdAt < 3000; // 3 seconds
+    
+    if (isNewSpark) {
+      setIsNew(true);
+      
+      // Pulse animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: false,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: false,
+          }),
+        ]),
+        { iterations: 3 }
+      ).start(() => setIsNew(false));
+    }
+  }, [spark.created_at]);
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -180,6 +212,7 @@ export default function DraggableSpark({
   const resizeHandleType = useRef<'corner' | 'side' | null>(null);
   const resizeCorner = useRef<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | null>(null);
   const resizeSide = useRef<'top' | 'bottom' | 'left' | 'right' | null>(null);
+  const resizeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   useEffect(() => {
     currentResizeSize.current = size;
@@ -213,17 +246,19 @@ export default function DraggableSpark({
 
         let newWidth = resizeStartSize.current.width;
         let newHeight = resizeStartSize.current.height;
+        let positionAdjustX = 0;
+        let positionAdjustY = 0;
         const aspectRatio = resizeStartSize.current.width / resizeStartSize.current.height;
+        const minSize = 80;
 
         if (handleType === 'corner' && corner) {
-          // Corner handles: maintain aspect ratio if locked, otherwise free resize
           const deltaX = gesture.dx;
           const deltaY = gesture.dy;
           
-          // Calculate which direction to resize based on corner
           let widthDelta = 0;
           let heightDelta = 0;
           
+          // Calculate resize direction based on corner
           if (corner === 'bottom-right') {
             widthDelta = deltaX;
             heightDelta = deltaY;
@@ -239,33 +274,49 @@ export default function DraggableSpark({
           }
 
           if (!cropMode) {
-            // Maintain aspect ratio - use the larger change
-            const absWidthDelta = Math.abs(widthDelta);
-            const absHeightDelta = Math.abs(heightDelta);
+            // Maintain aspect ratio - use diagonal distance for smoother scaling
+            const diagonal = Math.sqrt(widthDelta * widthDelta + heightDelta * heightDelta);
+            const sign = (widthDelta + heightDelta) >= 0 ? 1 : -1;
+            const scaleFactor = (resizeStartSize.current.width + (diagonal * sign)) / resizeStartSize.current.width;
             
-            if (absWidthDelta > absHeightDelta) {
-              newWidth = Math.max(80, resizeStartSize.current.width + widthDelta);
-              newHeight = newWidth / aspectRatio;
-            } else {
-              newHeight = Math.max(80, resizeStartSize.current.height + heightDelta);
-              newWidth = newHeight * aspectRatio;
-            }
+            newWidth = Math.max(minSize, resizeStartSize.current.width * scaleFactor);
+            newHeight = Math.max(minSize, resizeStartSize.current.height * scaleFactor);
           } else {
-            // Crop mode: free resize to crop/zoom the image
-            newWidth = Math.max(80, resizeStartSize.current.width + widthDelta);
-            newHeight = Math.max(80, resizeStartSize.current.height + heightDelta);
+            // Crop mode: free resize
+            newWidth = Math.max(minSize, resizeStartSize.current.width + widthDelta);
+            newHeight = Math.max(minSize, resizeStartSize.current.height + heightDelta);
+          }
+
+          // Adjust position when resizing from top or left corners
+          if (corner === 'top-left') {
+            positionAdjustX = resizeStartSize.current.width - newWidth;
+            positionAdjustY = resizeStartSize.current.height - newHeight;
+          } else if (corner === 'top-right') {
+            positionAdjustY = resizeStartSize.current.height - newHeight;
+          } else if (corner === 'bottom-left') {
+            positionAdjustX = resizeStartSize.current.width - newWidth;
           }
         } else if (handleType === 'side' && side) {
-          // Side handles: allow non-proportional resizing
+          // Side handles: non-proportional resizing
           if (side === 'right') {
-            newWidth = Math.max(80, resizeStartSize.current.width + gesture.dx);
+            newWidth = Math.max(minSize, resizeStartSize.current.width + gesture.dx);
           } else if (side === 'left') {
-            newWidth = Math.max(80, resizeStartSize.current.width - gesture.dx);
+            newWidth = Math.max(minSize, resizeStartSize.current.width - gesture.dx);
+            positionAdjustX = resizeStartSize.current.width - newWidth;
           } else if (side === 'bottom') {
-            newHeight = Math.max(80, resizeStartSize.current.height + gesture.dy);
+            newHeight = Math.max(minSize, resizeStartSize.current.height + gesture.dy);
           } else if (side === 'top') {
-            newHeight = Math.max(80, resizeStartSize.current.height - gesture.dy);
+            newHeight = Math.max(minSize, resizeStartSize.current.height - gesture.dy);
+            positionAdjustY = resizeStartSize.current.height - newHeight;
           }
+        }
+        
+        // Apply position adjustment
+        if (positionAdjustX !== 0 || positionAdjustY !== 0) {
+          position.setValue({
+            x: resizeStartPos.current.x + positionAdjustX,
+            y: resizeStartPos.current.y + positionAdjustY,
+          });
         }
         
         setSize({ width: newWidth, height: newHeight });
@@ -274,10 +325,23 @@ export default function DraggableSpark({
 
       onPanResponderRelease: () => {
         if (isResizingRef.current && onResize) {
-          // Round to integers to fix database error
           const roundedWidth = Math.round(currentResizeSize.current.width);
           const roundedHeight = Math.round(currentResizeSize.current.height);
-          onResize(spark.id, roundedWidth, roundedHeight);
+          
+          // Update position if adjusted
+          const finalX = Math.round((position.x as any)._value);
+          const finalY = Math.round((position.y as any)._value);
+          
+          // Debounce database update slightly for smoother UX
+          if (resizeTimeout.current) {
+            clearTimeout(resizeTimeout.current);
+          }
+          resizeTimeout.current = setTimeout(() => {
+            onResize(spark.id, roundedWidth, roundedHeight);
+            if (finalX !== spark.x || finalY !== spark.y) {
+              onMoveEnd(spark.id, finalX, finalY);
+            }
+          }, 50);
         }
         isResizingRef.current = false;
         resizeHandleType.current = null;
@@ -302,7 +366,6 @@ export default function DraggableSpark({
       onPanResponderGrant: () => {
         if (isResizingRef.current || isPinchingRef.current) return;
         
-        onSelect(spark.id);
         tapStartTime.current = Date.now();
         hasMoved.current = false;
 
@@ -363,9 +426,27 @@ export default function DraggableSpark({
         const tapDuration = Date.now() - tapStartTime.current;
         if (!hasMoved.current && tapDuration < 300) {
           if (isAudio) {
-            // For audio sparks, toggle playback on tap (don't call onTap)
-            toggleAudioPlayback();
-            return; // Early return to prevent onTap call
+            // Check if this is a music spark (Spotify)
+            let isMusic = false;
+            try {
+              if (spark.text_content && spark.text_content.startsWith('{')) {
+                const metadata = JSON.parse(spark.text_content);
+                isMusic = !!metadata;
+              }
+            } catch (e) {
+              // Not music
+            }
+
+            if (isMusic) {
+              // For music sparks, call onTap to select (for resize/delete)
+              if (onTap) {
+                onTap(spark.id);
+              }
+            } else {
+              // For voice recordings, toggle playback on tap
+              toggleAudioPlayback();
+            }
+            return;
           } else if (isFile) {
             // For file sparks, open the file URL
             if (spark.content_url) {
@@ -389,6 +470,16 @@ export default function DraggableSpark({
     })
   ).current;
 
+  const glowColor = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(59, 130, 246, 0)', 'rgba(59, 130, 246, 0.8)']
+  });
+
+  const glowWidth = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 4]
+  });
+
   return (
     <Animated.View
       {...panResponder.panHandlers}
@@ -400,18 +491,38 @@ export default function DraggableSpark({
             { translateY: position.y },
           ],
         },
+        isNew && {
+          borderWidth: glowWidth,
+          borderColor: glowColor,
+          borderRadius: 12,
+          shadowColor: '#3B82F6',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: glowAnim,
+          shadowRadius: 12,
+          elevation: isNew ? 8 : 0,
+        },
       ]}
     >
       {isImage && !isFile && (
         <View style={{ position: 'relative' }}>
-          <Image
-            source={{ uri: spark.content_url }}
+          <Animated.View
             style={[
-              styles.image,
-              { width: size.width, height: size.height },
-              selected && styles.selected,
+              isNew && {
+                borderWidth: glowWidth,
+                borderColor: glowColor,
+                borderRadius: 8,
+              }
             ]}
-          />
+          >
+            <Image
+              source={{ uri: spark.content_url }}
+              style={[
+                styles.image,
+                { width: size.width, height: size.height },
+                selected && styles.selected,
+              ]}
+            />
+          </Animated.View>
           {selected && (
             <>
               {/* Crop toggle button */}
@@ -426,6 +537,20 @@ export default function DraggableSpark({
                   color={cropMode ? "#10B981" : "#3A7AFE"}
                 />
               </TouchableOpacity>
+
+              {/* Delete button */}
+              {onDelete && (
+                <TouchableOpacity
+                  style={[styles.deleteButton, { top: -8, right: -8 }]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onDelete(spark.id);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="trash" size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
 
               {/* Corner handles - only show in crop mode for non-proportional resize */}
               {cropMode && (
@@ -462,45 +587,86 @@ export default function DraggableSpark({
       )}
 
       {isFile && (
-        <View
-          style={[
-            styles.fileCard,
-            { width: size.width, height: size.height },
-            selected && styles.selectedFile,
-          ]}
-        >
-          <Image
-            source={require("../assets/file.png")}
-            style={styles.fileIcon}
-          />
-          <Text style={styles.fileName} numberOfLines={2}>
-            {spark.title}
-          </Text>
-          <Text style={styles.fileType} numberOfLines={1}>
-            {spark.text_content?.split('/').pop()?.toUpperCase() || 'FILE'}
-          </Text>
+        <View style={{ position: 'relative' }}>
+          <View
+            style={[
+              styles.fileCard,
+              { width: size.width, height: size.height },
+              selected && styles.selectedFile,
+            ]}
+          >
+            <Image
+              source={require("../assets/file.png")}
+              style={styles.fileIcon}
+            />
+            <Text style={styles.fileName} numberOfLines={2}>
+              {spark.title}
+            </Text>
+            <Text style={styles.fileType} numberOfLines={1}>
+              {spark.text_content?.split('/').pop()?.toUpperCase() || 'FILE'}
+            </Text>
+          </View>
+          {selected && onDelete && (
+            <TouchableOpacity
+              style={[styles.deleteButton, { top: -8, right: -8 }]}
+              onPress={(e) => {
+                e.stopPropagation();
+                onDelete(spark.id);
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="trash" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
-      {isNote && (
-        <View
-          style={[
-            styles.noteCard,
-            selected && styles.selectedNote,
-          ]}
-        >
-          {spark.title ? (
-            <Text style={styles.noteTitle} numberOfLines={1}>
-              {spark.title}
-            </Text>
-          ) : null}
-          {spark.text_content ? (
-            <Text style={styles.noteBody} numberOfLines={3}>
-              {spark.text_content}
-            </Text>
-          ) : null}
-        </View>
-      )}
+      {isNote && (() => {
+        const maxLength = 120;
+        const isTruncated = spark.text_content && spark.text_content.length > maxLength;
+        const displayText = isTruncated 
+          ? spark.text_content.substring(0, maxLength) + '...'
+          : spark.text_content;
+
+        return (
+          <View style={{ position: 'relative' }}>
+            <View
+              style={[
+                styles.noteCard,
+                selected && styles.selectedNote,
+              ]}
+            >
+              {spark.title ? (
+                <Text style={styles.noteTitle} numberOfLines={1}>
+                  {spark.title}
+                </Text>
+              ) : null}
+              {spark.text_content ? (
+                <>
+                  <Text style={styles.noteBody} numberOfLines={isTruncated ? 4 : undefined}>
+                    {displayText}
+                  </Text>
+                  {isTruncated && (
+                    <Text style={styles.readMore}>Tap to read more</Text>
+                  )}
+                </>
+              ) : null}
+            </View>
+            {selected && onDelete && (
+              <TouchableOpacity
+                style={[styles.deleteButton, { top: -8, right: -8 }]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onDelete(spark.id);
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="trash" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })()}
 
       {isAudio && (() => {
         // Parse metadata if it exists (music sparks store JSON in text_content)
@@ -544,53 +710,153 @@ export default function DraggableSpark({
                   </Text>
                 )}
               </View>
+              {selected && (
+                <>
+                  {/* Resize handles */}
+                  <View
+                    {...resizeHandles['top-left'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  <View
+                    {...resizeHandles['top-right'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  <View
+                    {...resizeHandles['bottom-left'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  <View
+                    {...resizeHandles['bottom-right'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  {/* Delete button */}
+                  {onDelete && (
+                    <TouchableOpacity
+                      style={[styles.deleteButton, { top: -8, right: -8 }]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        onDelete(spark.id);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash" size={18} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
             </View>
           );
         } else if (isMusic && displayMode === 'text') {
           // Show text card for music
           return (
-            <View
-              style={[
-                styles.musicTextCard,
-                { width: size.width, height: size.height },
-                selected && styles.selectedAudio,
-                isPlaying && styles.audioCardPlaying,
-              ]}
-            >
-              <Ionicons 
-                name={isPlaying ? "pause" : "play"} 
-                size={28} 
-                color="#8B5CF6" 
-              />
-              <Text style={styles.musicTitle} numberOfLines={2}>
-                {spark.title}
-              </Text>
-              {metadata.artists && (
-                <Text style={styles.musicArtist} numberOfLines={1}>
-                  {metadata.artists}
+            <View style={{ position: 'relative' }}>
+              <View
+                style={[
+                  styles.musicTextCard,
+                  { width: size.width, height: size.height },
+                  selected && styles.selectedAudio,
+                  isPlaying && styles.audioCardPlaying,
+                ]}
+              >
+                <Ionicons 
+                  name={isPlaying ? "pause" : "play"} 
+                  size={28} 
+                  color="#8B5CF6" 
+                />
+                <Text style={styles.musicTitle} numberOfLines={2}>
+                  {spark.title}
                 </Text>
+                {metadata.artists && (
+                  <Text style={styles.musicArtist} numberOfLines={1}>
+                    {metadata.artists}
+                  </Text>
+                )}
+              </View>
+              {selected && (
+                <>
+                  {/* Resize handles */}
+                  <View
+                    {...resizeHandles['top-left'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  <View
+                    {...resizeHandles['top-right'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  <View
+                    {...resizeHandles['bottom-left'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  <View
+                    {...resizeHandles['bottom-right'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  {/* Delete button */}
+                  {onDelete && (
+                    <TouchableOpacity
+                      style={[styles.deleteButton, { top: -8, right: -8 }]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        onDelete(spark.id);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash" size={18} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}
+                </>
               )}
             </View>
           );
         } else {
           // Voice recording - original style
           return (
-            <View
-              style={[
-                styles.audioCard,
-                { width: size.width, height: size.height },
-                selected && styles.selectedAudio,
-                isPlaying && styles.audioCardPlaying,
-              ]}
-            >
-              <Ionicons 
-                name={isPlaying ? "pause" : "mic"} 
-                size={32} 
-                color="#10B981" 
-              />
-              <Text style={styles.audioLabel} numberOfLines={1}>
-                {spark.title || 'Audio'}
-              </Text>
+            <View style={{ position: 'relative' }}>
+              <View
+                style={[
+                  styles.audioCard,
+                  { width: size.width, height: size.height },
+                  selected && styles.selectedAudio,
+                  isPlaying && styles.audioCardPlaying,
+                ]}
+              >
+                <Ionicons 
+                  name={isPlaying ? "pause" : "mic"} 
+                  size={32} 
+                  color="#10B981" 
+                />
+                <Text style={styles.audioLabel} numberOfLines={1}>
+                  {spark.title || 'Audio'}
+                </Text>
+              </View>
+              {selected && onDelete && (
+                <TouchableOpacity
+                  style={[styles.deleteButton, { top: -8, right: -8 }]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onDelete(spark.id);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="trash" size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
             </View>
           );
         }
@@ -629,6 +895,12 @@ const styles = StyleSheet.create({
   },
   noteBody: {
     fontSize: 13,
+  },
+  readMore: {
+    fontSize: 11,
+    color: "#A78BFA",
+    fontStyle: "italic",
+    marginTop: 6,
   },
   audioCard: {
     borderRadius: 14,
@@ -783,6 +1055,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderWidth: 2,
     borderColor: "#3A7AFE",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+    ...theme.shadows.md,
+  },
+  deleteButton: {
+    position: "absolute",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#EF4444",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 10,

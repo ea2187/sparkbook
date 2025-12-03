@@ -165,23 +165,23 @@ const AddMusicDetailsScreen: FC = () => {
           </View>
         </View>
 
+        {/* Add Button - Fixed above bottom of screen */}
+        <View style={styles.fixedButtonContainer}>
+          <TouchableOpacity
+            style={[styles.addButton, adding && styles.addButtonDisabled]}
+            onPress={handleAddToBoard}
+            disabled={adding}
+          >
+            {adding ? (
+              <ActivityIndicator size="small" color={theme.colors.white} />
+            ) : (
+              <Text style={styles.addButtonText}>Add to Board</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.spacer} />
       </ScrollView>
-
-      {/* Add Button */}
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.addButton, adding && styles.addButtonDisabled]}
-          onPress={handleAddToBoard}
-          disabled={adding}
-        >
-          {adding ? (
-            <ActivityIndicator size="small" color={theme.colors.white} />
-          ) : (
-            <Text style={styles.addButtonText}>Add to Board</Text>
-          )}
-        </TouchableOpacity>
-      </View>
     </View>
   );
 };
@@ -327,13 +327,14 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
   },
   spacer: {
-    height: 40,
+    height: 120,
   },
-  footer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+  fixedButtonContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    zIndex: 10,
   },
   addButton: {
     backgroundColor: theme.colors.primary,
@@ -341,7 +342,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    ...theme.shadows.md,
+    ...theme.shadows.lg,
   },
   addButtonDisabled: {
     backgroundColor: '#CCCCCC',

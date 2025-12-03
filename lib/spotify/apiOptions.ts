@@ -38,6 +38,9 @@ const formatter = (data: Array<SpotifyApi.TrackObjectFull | SpotifyTrackObjectWi
 
 /* Fetches data from the given endpoint URL with the access token provided. */
 const fetcher = <T>(url: string, token: string): Promise<AxiosResponse<T> | null> => {
+  console.log('Spotify API call to:', url);
+  console.log('Token (first 20 chars):', token?.substring(0, 20) + '...');
+  
   return axios.get(url, {
     headers: {
       Accept: "application/json",
@@ -45,8 +48,13 @@ const fetcher = <T>(url: string, token: string): Promise<AxiosResponse<T> | null
       Authorization: "Bearer " + token,
     },
   }).catch(e => {
-    console.error(e);
-    alert(ERROR_ALERT);
+    console.error('Spotify API Error:', e.response?.status, e.response?.data);
+    console.error('Full error:', e);
+    if (e.response?.status === 401) {
+      alert('Spotify session expired. Please reconnect your account.');
+    } else {
+      alert(ERROR_ALERT);
+    }
     return null;
   });
 };
@@ -134,7 +142,29 @@ export const exchangeCodeForToken = (
     })
     .catch((err) => {
       console.error("Error exchanging code for token:", err);
+      console.error("Error details:", err.response?.data);
       alert(ERROR_ALERT);
+      return null;
+    });
+}
+
+export const refreshAccessToken = (
+  refreshToken: string,
+  CLIENT_ID: string
+): Promise<SpotifyAuthResponse | null> => {
+  const params = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    client_id: CLIENT_ID,
+  });
+
+  return axios.post<SpotifyAuthResponse>(DISCOVERY.tokenEndpoint, params.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  })
+    .then((resp) => resp?.data || null)
+    .catch((err) => {
+      console.error("Error refreshing token:", err);
+      console.error("Error details:", err.response?.data);
       return null;
     });
 }

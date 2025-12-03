@@ -13,6 +13,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from "react-native";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp, NavigationProp } from "@react-navigation/native";
@@ -53,6 +54,8 @@ const BoardScreen: FC = () => {
   const [selectedSparkId, setSelectedSparkId] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const zoomAnim = useRef(new Animated.Value(1)).current;
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [noteModalVisible, setNoteModalVisible] = useState(false);
   const [audioModalVisible, setAudioModalVisible] = useState(false);
@@ -62,6 +65,7 @@ const BoardScreen: FC = () => {
   const [newBoardName, setNewBoardName] = useState("");
   const [organizeModalVisible, setOrganizeModalVisible] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
+  const [helpModalVisible, setHelpModalVisible] = useState(false);
   
   // Undo/Redo state
   const [history, setHistory] = useState<any[][]>([]);
@@ -195,6 +199,36 @@ const BoardScreen: FC = () => {
     setScrollEnabled(true);
   }
 
+  // Zoom controls
+  function handleZoomIn() {
+    const newZoom = Math.min(zoom + 0.25, 3);
+    setZoom(newZoom);
+    Animated.spring(zoomAnim, {
+      toValue: newZoom,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+  }
+
+  function handleZoomOut() {
+    const newZoom = Math.max(zoom - 0.25, 0.5);
+    setZoom(newZoom);
+    Animated.spring(zoomAnim, {
+      toValue: newZoom,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+  }
+
+  function handleResetZoom() {
+    setZoom(1);
+    Animated.spring(zoomAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+  }
+
   // Update spark position in database
   function handleSparkMove(id: string, newX: number, newY: number) {
     // Update UI immediately
@@ -251,11 +285,11 @@ const BoardScreen: FC = () => {
 
   // Handle resize
   async function handleSparkResize(id: string, newWidth: number, newHeight: number) {
-    // Update UI
+    // Update UI immediately for smooth feedback
     setSparks((prev) => {
       const updated = prev.map((s) => (s.id === id ? { ...s, width: newWidth, height: newHeight } : s));
       // Add to history after resize completes
-      setTimeout(() => addToHistory(updated), 100);
+      setTimeout(() => addToHistory(updated), 150);
       return updated;
     });
 
@@ -267,6 +301,8 @@ const BoardScreen: FC = () => {
 
     if (error) {
       console.error("Failed to update spark size:", error);
+      // Revert on error
+      fetchSparks();
     }
   }
 
@@ -479,14 +515,14 @@ const BoardScreen: FC = () => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="arrow-back" size={26} color={theme.colors.textPrimary} />
+            <Image source={require("../assets/selected home.png")} style={styles.backButtonIcon} />
           </TouchableOpacity>
-        </View>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{boardName}</Text>
-          {uploading && (
-            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
-          )}
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">{boardName}</Text>
+            {uploading && (
+              <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
+            )}
+          </View>
         </View>
         <View style={styles.rightHeaderContainer}>
           {/* UNDO/REDO BUTTONS */}
@@ -568,7 +604,14 @@ const BoardScreen: FC = () => {
         )}
 
         {/* SPARKS */}
-        <View style={styles.canvasContent}>
+        <Animated.View 
+          style={[
+            styles.canvasContent,
+            {
+              transform: [{ scale: zoomAnim }],
+            },
+          ]}
+        >
           {/* Tap background to deselect */}
           <TouchableOpacity
             style={styles.canvasBackground}
@@ -588,6 +631,7 @@ const BoardScreen: FC = () => {
               onDragEnd={handleDragEnd}
               onTap={handleSparkTap}
               onLongPress={handleSparkLongPress}
+              onDelete={handleDeleteSpark}
             />
           ))}
 
@@ -599,8 +643,40 @@ const BoardScreen: FC = () => {
               <Text style={styles.emptyStateSubtext}>Add images to begin</Text>
             </View>
           )}
-        </View>
+        </Animated.View>
       </ScrollView>
+
+      {/* HELP BUTTON */}
+      <TouchableOpacity
+        style={styles.helpButtonFloating}
+        onPress={() => setHelpModalVisible(true)}
+      >
+        <Ionicons name="information-circle" size={28} color={theme.colors.white} />
+      </TouchableOpacity>
+
+      {/* ZOOM CONTROLS */}
+      <View style={styles.zoomControls}>
+        <TouchableOpacity
+          style={styles.zoomButton}
+          onPress={handleZoomOut}
+          disabled={zoom <= 0.5}
+        >
+          <Ionicons name="remove" size={20} color={zoom <= 0.5 ? theme.colors.textLight : theme.colors.textPrimary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.zoomResetButton}
+          onPress={handleResetZoom}
+        >
+          <Text style={styles.zoomText}>{Math.round(zoom * 100)}%</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.zoomButton}
+          onPress={handleZoomIn}
+          disabled={zoom >= 3}
+        >
+          <Ionicons name="add" size={20} color={zoom >= 3 ? theme.colors.textLight : theme.colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
 
       {/* BOTTOM BAR */}
       <View style={styles.bottomBar}>
@@ -618,7 +694,7 @@ const BoardScreen: FC = () => {
           style={styles.bottomBarIcon} 
           onPress={() => navigation.navigate('AddMusic', { boardId })}
         >
-          <Ionicons name="musical-notes" size={32} color={theme.colors.primary} style={{ marginBottom: 6 }} />
+          <Image source={require("../assets/music.png")} style={styles.bottomBarIconImage} />
           <Text style={styles.bottomBarLabel}>Music</Text>
         </TouchableOpacity>
 
@@ -628,7 +704,9 @@ const BoardScreen: FC = () => {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.bottomBarIcon} onPress={() => setMoreMenuVisible(true)}>
-          <Ionicons name="ellipsis-horizontal" size={32} color={theme.colors.textPrimary} style={{ marginBottom: 6 }} />
+          <View style={styles.bottomBarIconPlaceholder}>
+            <Ionicons name="ellipsis-horizontal" size={28} color={theme.colors.textPrimary} />
+          </View>
           <Text style={styles.bottomBarLabel}>More</Text>
         </TouchableOpacity>
       </View>
@@ -731,6 +809,61 @@ const BoardScreen: FC = () => {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* HELP MODAL */}
+      <Modal
+        visible={helpModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setHelpModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.helpModalOverlay}
+          activeOpacity={1}
+          onPress={() => setHelpModalVisible(false)}
+        >
+          <View style={styles.helpModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.helpModalHeader}>
+              <Ionicons name="information-circle" size={32} color={theme.colors.primary} />
+              <Text style={styles.helpModalTitle}>How to Use Your Board</Text>
+            </View>
+            
+            <View style={styles.helpSection}>
+              <View style={styles.helpItem}>
+                <Ionicons name="finger-print" size={20} color={theme.colors.primary} />
+                <Text style={styles.helpItemText}><Text style={styles.helpBold}>Tap</Text> a spark to select, resize, or delete</Text>
+              </View>
+              <View style={styles.helpItem}>
+                <Ionicons name="hand-left" size={20} color={theme.colors.primary} />
+                <Text style={styles.helpItemText}><Text style={styles.helpBold}>Long press</Text> to view spark details</Text>
+              </View>
+              <View style={styles.helpItem}>
+                <Ionicons name="move" size={20} color={theme.colors.primary} />
+                <Text style={styles.helpItemText}><Text style={styles.helpBold}>Drag</Text> to move sparks around</Text>
+              </View>
+              <View style={styles.helpItem}>
+                <Ionicons name="resize" size={20} color={theme.colors.primary} />
+                <Text style={styles.helpItemText}><Text style={styles.helpBold}>Blue corners</Text> appear when selected to resize</Text>
+              </View>
+              <View style={styles.helpItem}>
+                <Ionicons name="arrow-undo" size={20} color={theme.colors.primary} />
+                <Text style={styles.helpItemText}><Text style={styles.helpBold}>Undo/Redo</Text> buttons track all changes</Text>
+              </View>
+              <View style={styles.helpItem}>
+                <Ionicons name="sparkles" size={20} color={theme.colors.primary} />
+                <Text style={styles.helpItemText}><Text style={styles.helpBold}>Organize</Text> auto-arranges your sparks neatly</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.helpModalButton}
+              onPress={() => setHelpModalVisible(false)}
+            >
+              <Text style={styles.helpModalButtonText}>Got it!</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </View>
   );
 };
@@ -740,9 +873,9 @@ const styles = StyleSheet.create({
   header: {
   flexDirection: "row",
   alignItems: "center",
-  paddingTop: 60,
-  paddingHorizontal: 20,
-  height: 110,
+  paddingTop: 50,
+  paddingHorizontal: 16,
+  paddingBottom: 12,
   backgroundColor: theme.colors.white,
   zIndex: 10000,
   elevation: 12,
@@ -750,38 +883,54 @@ const styles = StyleSheet.create({
   top: 0,
   left: 0,
   right: 0,
+  justifyContent: "space-between",
 },
 
   leftHeaderContainer: {
-    position: "absolute",
-    top: 65,
-    left: 20,
-    zIndex: 10001,
-  },
-  rightHeaderContainer: {
-    position: "absolute",
-    top: 65,
-    right: 20,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    zIndex: 10001,
-  },
-  backButton: {
-    zIndex: 10001,
-  },
-  headerCenter: {
-    position: "absolute",
-    top: 65,
-    left: 0,
-    right: 0,
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
+  },
+  rightHeaderContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
     justifyContent: "center",
+    alignItems: "center",
+  },
+  backButtonIcon: {
+    width: 40,
+    height: 40,
+    resizeMode: "contain",
+  },
+  headerTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "600",
+    color: theme.colors.textPrimary,
+    flexShrink: 1,
+  },
+  helpButtonFloating: {
+    position: 'absolute',
+    bottom: 120,
+    left: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: theme.colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    ...theme.shadows.lg,
   },
   canvasContainer: { width: BOARD_WIDTH, height: BOARD_HEIGHT},
   gridContainer: { ...StyleSheet.absoluteFillObject },
@@ -820,10 +969,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   undoRedoButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     backgroundColor: theme.colors.white,
-    borderRadius: 18,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
     ...theme.shadows.md,
@@ -835,10 +984,10 @@ const styles = StyleSheet.create({
     zIndex: 10001,
   },
   organizeButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     backgroundColor: theme.colors.white,
-    borderRadius: 20,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
     ...theme.shadows.md,
@@ -861,12 +1010,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "visible",
+    minWidth: 44,
+    minHeight: 44,
     padding: 4,
   },
   bottomBarIconImage: { 
-    width: 36, 
-    height: 36,
+    width: 32, 
+    height: 32,
     resizeMode: "contain",
+    marginBottom: 6,
+  },
+  bottomBarIconPlaceholder: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 6,
   },
   bottomBarLabel: {
@@ -956,6 +1114,99 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
   },
   renameModalButtonSaveText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.white,
+  },
+  zoomControls: {
+    position: 'absolute',
+    bottom: 120,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+    borderRadius: 24,
+    padding: 4,
+    gap: 4,
+    ...theme.shadows.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  zoomButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.background,
+  },
+  zoomResetButton: {
+    paddingHorizontal: 16,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.background,
+    minWidth: 60,
+  },
+  zoomText: {
+    fontSize: 13,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+  },
+  helpModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  helpModalContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 20,
+    padding: 24,
+    width: "100%",
+    maxWidth: 400,
+    ...theme.shadows.lg,
+  },
+  helpModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  helpModalTitle: {
+    fontSize: 22,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+    flex: 1,
+  },
+  helpSection: {
+    gap: 16,
+    marginBottom: 24,
+  },
+  helpItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  helpItemText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+    flex: 1,
+  },
+  helpBold: {
+    fontFamily: theme.typography.fontFamily.semiBold,
+  },
+  helpModalButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    ...theme.shadows.md,
+  },
+  helpModalButtonText: {
     fontSize: 16,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.white,

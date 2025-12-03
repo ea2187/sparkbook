@@ -118,8 +118,8 @@ const styles = StyleSheet.create({
   },
   container: {
     backgroundColor: theme.colors.white,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
+    borderTopLeftRadius: theme.borderRadius.modal,
+    borderTopRightRadius: theme.borderRadius.modal,
     padding: theme.spacing.lg,
     paddingBottom: Platform.OS === 'ios' ? 40 : theme.spacing.lg,
     maxHeight: '80%',

@@ -395,8 +395,8 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: theme.colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: theme.borderRadius.modal,
+    borderTopRightRadius: theme.borderRadius.modal,
     paddingBottom: 40,
     height: SCREEN_HEIGHT * 0.5,
   },

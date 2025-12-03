@@ -85,6 +85,7 @@ export const borderRadius = {
   lg: 12,
   xl: 16,
   xxl: 24,
+  modal: 28, // Apple HIG standard for bottom sheets
   round: 999,
 };
 
