@@ -1,0 +1,248 @@
+import axios from 'axios';
+import { OPENAI_API_KEY } from '@env';
+
+interface SparkInfo {
+  id: string;
+  type: string;
+  title?: string;
+  text_content?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface OrganizedPosition {
+  id: string;
+  x: number;
+  y: number;
+}
+
+/**
+ * Simple organization methods (no AI required)
+ */
+export function organizeBoardSimple(
+  sparks: SparkInfo[],
+  method: 'grid' | 'spacing' | 'byType',
+  boardWidth: number,
+  boardHeight: number
+): OrganizedPosition[] {
+  if (sparks.length === 0) return [];
+
+  const positions: OrganizedPosition[] = [];
+  const padding = 30;
+  
+  // Start organizing from the center of the board (where the viewport is)
+  const centerX = boardWidth / 2;
+  const centerY = boardHeight / 2;
+  
+  // Calculate grid dimensions
+  const cols = Math.ceil(Math.sqrt(sparks.length));
+  const cellWidth = 250; // Fixed cell width
+  const cellHeight = 200; // Fixed cell height
+  
+  // Calculate starting position (top-left of grid, centered)
+  const gridWidth = cols * cellWidth;
+  const startX = centerX - gridWidth / 2;
+  const startY = centerY - 200; // Start a bit above center
+
+  if (method === 'grid') {
+    // Arrange in a grid centered on the board
+    sparks.forEach((spark, index) => {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      positions.push({
+        id: spark.id,
+        x: Math.max(padding, startX + col * cellWidth + (cellWidth - spark.width) / 2),
+        y: Math.max(padding, startY + row * cellHeight + (cellHeight - spark.height) / 2),
+      });
+    });
+  } else if (method === 'byType') {
+    // Group by type, centered
+    const byType: { [key: string]: SparkInfo[] } = {};
+    sparks.forEach(spark => {
+      if (!byType[spark.type]) byType[spark.type] = [];
+      byType[spark.type].push(spark);
+    });
+
+    let currentY = startY;
+    Object.keys(byType).forEach(type => {
+      const typeSparks = byType[type];
+      const typeCols = Math.ceil(Math.sqrt(typeSparks.length));
+      const typeGridWidth = typeCols * cellWidth;
+      const typeStartX = centerX - typeGridWidth / 2;
+      
+      typeSparks.forEach((spark, index) => {
+        const row = Math.floor(index / typeCols);
+        const col = index % typeCols;
+        positions.push({
+          id: spark.id,
+          x: Math.max(padding, typeStartX + col * cellWidth + (cellWidth - spark.width) / 2),
+          y: Math.max(padding, currentY + row * cellHeight + (cellHeight - spark.height) / 2),
+        });
+      });
+      currentY += Math.ceil(typeSparks.length / typeCols) * cellHeight + padding;
+    });
+  } else {
+    // Smart spacing - maintain relative positions but remove overlaps, centered
+    const sorted = [...sparks].sort((a, b) => a.x - b.x || a.y - b.y);
+    const totalWidth = sorted.reduce((sum, s) => sum + s.width + padding, 0);
+    let currentX = Math.max(padding, centerX - totalWidth / 2);
+    let currentY = startY;
+    let maxHeightInRow = 0;
+
+    sorted.forEach(spark => {
+      if (currentX + spark.width > boardWidth - padding) {
+        const rowWidth = sorted.slice(0, sorted.indexOf(spark)).reduce((sum, s) => sum + s.width + padding, 0);
+        currentX = Math.max(padding, centerX - rowWidth / 2);
+        currentY += maxHeightInRow + padding;
+        maxHeightInRow = 0;
+      }
+      positions.push({
+        id: spark.id,
+        x: Math.max(padding, currentX),
+        y: Math.max(padding, currentY),
+      });
+      currentX += spark.width + padding;
+      maxHeightInRow = Math.max(maxHeightInRow, spark.height);
+    });
+  }
+
+  return positions;
+}
+
+/**
+ * Uses AI to organize sparks on a board based on a user prompt
+ */
+export async function organizeBoardWithAI(
+  sparks: SparkInfo[],
+  prompt: string,
+  boardWidth: number,
+  boardHeight: number
+): Promise<OrganizedPosition[]> {
+  if (!OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured. Please add OPENAI_API_KEY to your .env file.');
+  }
+
+  // Prepare spark information for AI
+  const sparkDescriptions = sparks.map((spark, index) => {
+    let description = `Spark ${index + 1} (ID: ${spark.id}):\n`;
+    description += `  - Type: ${spark.type}\n`;
+    if (spark.title) description += `  - Title: ${spark.title}\n`;
+    if (spark.text_content && spark.type === 'note') {
+      // Truncate long notes
+      const noteText = spark.text_content.length > 200 
+        ? spark.text_content.substring(0, 200) + '...'
+        : spark.text_content;
+      description += `  - Content: ${noteText}\n`;
+    }
+    description += `  - Current position: (${Math.round(spark.x)}, ${Math.round(spark.y)})\n`;
+    description += `  - Size: ${Math.round(spark.width)}x${Math.round(spark.height)}\n`;
+    return description;
+  }).join('\n');
+
+  const systemPrompt = `You are an AI assistant that organizes visual elements on a canvas. 
+You will receive a list of sparks (visual elements) and a user's organization request.
+Your task is to return new x,y coordinates for each spark that best fulfills the user's request.
+
+The canvas dimensions are: ${boardWidth} x ${boardHeight} pixels.
+Each spark has a width and height - make sure sparks don't overlap significantly.
+Return coordinates as a JSON object with a "positions" array with this exact format:
+{
+  "positions": [
+    {"id": "spark-id-1", "x": 100, "y": 200},
+    {"id": "spark-id-2", "x": 300, "y": 200}
+  ]
+}
+
+Rules:
+- All coordinates must be within the canvas bounds (0 to ${boardWidth} for x, 0 to ${boardHeight} for y)
+- Maintain reasonable spacing between sparks (at least 20-30 pixels)
+- Consider the spark's width and height when positioning
+- Group related items together if the prompt suggests grouping
+- Create logical arrangements based on the prompt`;
+
+  const userPrompt = `Here are the sparks on the board:\n\n${sparkDescriptions}\n\nUser's organization request: "${prompt}"\n\nPlease return the new positions as a JSON object with a "positions" array containing all spark positions.`;
+
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4o-mini', // Using mini for cost efficiency, can upgrade to gpt-4 if needed
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    const content = response.data.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No response from AI');
+    }
+
+    // Parse the JSON response
+    const parsed = JSON.parse(content);
+    
+    // Handle both array and object with array property
+    let positions: OrganizedPosition[];
+    if (Array.isArray(parsed)) {
+      positions = parsed;
+    } else if (parsed.positions && Array.isArray(parsed.positions)) {
+      positions = parsed.positions;
+    } else if (parsed.sparks && Array.isArray(parsed.sparks)) {
+      positions = parsed.sparks;
+    } else {
+      // Try to extract any array from the response
+      const keys = Object.keys(parsed);
+      const arrayKey = keys.find(key => Array.isArray(parsed[key]));
+      if (arrayKey) {
+        positions = parsed[arrayKey];
+      } else {
+        throw new Error('Unexpected response format from AI');
+      }
+    }
+
+    // Validate positions
+    const validatedPositions: OrganizedPosition[] = positions.map((pos: any) => {
+      const x = Math.max(0, Math.min(boardWidth - 200, pos.x || 0));
+      const y = Math.max(0, Math.min(boardHeight - 200, pos.y || 0));
+      return {
+        id: pos.id,
+        x: Math.round(x),
+        y: Math.round(y),
+      };
+    });
+
+    return validatedPositions;
+  } catch (error: any) {
+    console.error('AI organization error:', error);
+    
+    // Check if it's a quota/billing error
+    const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
+    const isQuotaError = errorMessage.includes('quota') || 
+                        errorMessage.includes('billing') || 
+                        errorMessage.includes('insufficient') ||
+                        error.response?.status === 429;
+    
+    if (isQuotaError) {
+      // Fall back to simple grid organization
+      console.log('⚠️ API quota exceeded, falling back to simple grid organization');
+      return organizeBoardSimple(sparks, 'grid', boardWidth, boardHeight);
+    }
+    
+    if (error.response) {
+      throw new Error(`AI API error: ${errorMessage}`);
+    }
+    throw new Error(`Failed to organize board: ${errorMessage}`);
+  }
+}
+

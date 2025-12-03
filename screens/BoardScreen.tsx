@@ -28,7 +28,9 @@ import NoteComposerModal from '../components/NoteComposerModal';
 import { createNoteSpark } from '../lib/createNoteSpark';
 import QuickAddMenu from '../components/QuickAddMenu';
 import AudioRecorderModal from '../components/AudioRecorderModal';
-import MoreMenu from '../components/MoreMenu'; 
+import MoreMenu from '../components/MoreMenu';
+import OrganizeModal from '../components/OrganizeModal';
+import { organizeBoardSimple } from '../lib/organizeBoard'; 
 
 
 // ROUTE TYPES
@@ -58,6 +60,8 @@ const BoardScreen: FC = () => {
   const [gridVisible, setGridVisible] = useState(true);
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [newBoardName, setNewBoardName] = useState("");
+  const [organizeModalVisible, setOrganizeModalVisible] = useState(false);
+  const [isOrganizing, setIsOrganizing] = useState(false);
   
   // Undo/Redo state
   const [history, setHistory] = useState<any[][]>([]);
@@ -311,6 +315,83 @@ const BoardScreen: FC = () => {
     setRenameModalVisible(false);
   }
 
+  // Handle organize with preset options
+  async function handleOrganize(method: 'grid' | 'spacing' | 'byType') {
+    if (sparks.length === 0) {
+      Alert.alert("No Sparks", "Add some sparks to your board before organizing.");
+      setOrganizeModalVisible(false);
+      return;
+    }
+
+    setIsOrganizing(true);
+    try {
+      // Prepare spark info
+      const sparkInfo = sparks.map(spark => ({
+        id: spark.id,
+        type: spark.type,
+        title: spark.title || undefined,
+        text_content: spark.text_content || undefined,
+        x: spark.x,
+        y: spark.y,
+        width: spark.width,
+        height: spark.height,
+      }));
+
+      // Get organized positions using simple organization
+      const organizedPositions = organizeBoardSimple(
+        sparkInfo,
+        method,
+        BOARD_WIDTH,
+        BOARD_HEIGHT
+      );
+
+      // Save current state to history before organizing
+      addToHistory([...sparks]);
+
+      // Update all sparks with new positions
+      const updatedSparks = sparks.map(spark => {
+        const newPos = organizedPositions.find(pos => pos.id === spark.id);
+        if (newPos) {
+          return { ...spark, x: newPos.x, y: newPos.y };
+        }
+        return spark;
+      });
+
+      setSparks(updatedSparks);
+
+      // Update positions in database
+      for (const pos of organizedPositions) {
+        const { error } = await supabase
+          .from("sparks")
+          .update({ x: pos.x, y: pos.y })
+          .eq("id", pos.id);
+
+        if (error) {
+          console.error(`Failed to update spark ${pos.id}:`, error);
+        }
+      }
+
+      // Scroll to center where sparks are organized
+      if (scrollViewRef.current && organizedPositions.length > 0) {
+        const firstPos = organizedPositions[0];
+        // Scroll to show the organized area (centered)
+        scrollViewRef.current.scrollTo({
+          x: Math.max(0, firstPos.x - SCREEN_WIDTH / 2),
+          y: Math.max(0, firstPos.y - SCREEN_HEIGHT / 2),
+          animated: true,
+        });
+      }
+
+      setOrganizeModalVisible(false);
+      Alert.alert("Success", "Board organized successfully!");
+    } catch (error: any) {
+      console.error("Error organizing board:", error);
+      Alert.alert("Error", error.message || "Failed to organize board.");
+    } finally {
+      setIsOrganizing(false);
+    }
+  }
+
   // ---- IMAGE PICKING & UPLOAD ----
 
   async function requestPermissions() {
@@ -435,7 +516,10 @@ const BoardScreen: FC = () => {
           </View>
           {/* ORGANIZE BUTTON */}
           <View style={styles.organizeContainer}>
-            <TouchableOpacity style={styles.organizeButton}>
+            <TouchableOpacity
+              style={styles.organizeButton}
+              onPress={() => setOrganizeModalVisible(true)}
+            >
               <Ionicons name="sparkles" size={22} color={theme.colors.textPrimary} />
             </TouchableOpacity>
           </View>
@@ -590,6 +674,13 @@ const BoardScreen: FC = () => {
         onExportAsImage={handleExportAsImage}
         onRenameBoard={handleRenameBoard}
         gridVisible={gridVisible}
+      />
+
+      <OrganizeModal
+        visible={organizeModalVisible}
+        onClose={() => setOrganizeModalVisible(false)}
+        onSelectOption={handleOrganize}
+        isOrganizing={isOrganizing}
       />
 
       {/* Rename Board Modal */}
