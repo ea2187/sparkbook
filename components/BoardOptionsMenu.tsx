@@ -1,4 +1,4 @@
-import React, { FC, useState } from "react";
+import React, { FC, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -36,6 +36,15 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
   const [showRenameInput, setShowRenameInput] = useState(false);
   const [newName, setNewName] = useState(boardName);
   const [loading, setLoading] = useState(false);
+  const [isShared, setIsShared] = useState(false);
+  const [sharedPostId, setSharedPostId] = useState<string | null>(null);
+
+  // Check if board is shared when menu opens
+  useEffect(() => {
+    if (visible) {
+      checkIfShared();
+    }
+  }, [visible, boardId]);
 
   async function handleRename() {
     if (!newName.trim()) {
@@ -94,6 +103,199 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
 
     onBoardDeleted();
     onClose();
+  }
+
+  async function checkIfShared() {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        setIsShared(false);
+        return;
+      }
+
+      // Get all sparks from this board
+      const { data: sparks } = await supabase
+        .from("sparks")
+        .select("id")
+        .eq("board_id", boardId);
+
+      if (!sparks || sparks.length === 0) {
+        setIsShared(false);
+        return;
+      }
+
+      const sparkIds = sparks.map(s => s.id);
+
+      // Find community posts of type sparklette by this user
+      const { data: posts } = await supabase
+        .from("community_posts")
+        .select("id, attachments:community_attachments(spark_id)")
+        .eq("user_id", userData.user.id)
+        .eq("type", "sparklette");
+
+      if (!posts) {
+        setIsShared(false);
+        return;
+      }
+
+      // Check if any post has attachments matching all this board's sparks
+      for (const post of posts) {
+        const attachments = post.attachments as any[];
+        if (!attachments || attachments.length === 0) continue;
+
+        const attachmentSparkIds = attachments
+          .map(a => a.spark_id)
+          .filter((id): id is string => id != null);
+
+        // Check if all board sparks are in this post's attachments
+        const allSparksMatch = sparkIds.every(id => attachmentSparkIds.includes(id));
+        const sameCount = sparkIds.length === attachmentSparkIds.length;
+
+        if (allSparksMatch && sameCount) {
+          setIsShared(true);
+          setSharedPostId(post.id);
+          return;
+        }
+      }
+
+      setIsShared(false);
+      setSharedPostId(null);
+    } catch (error) {
+      console.error("Error checking if shared:", error);
+      setIsShared(false);
+    }
+  }
+
+  async function handleShare() {
+    setLoading(true);
+    
+    try {
+      // Get current user
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        Alert.alert("Error", "You must be logged in to share");
+        setLoading(false);
+        return;
+      }
+
+      // Fetch all sparks from the board
+      const { data: sparks, error: sparksError } = await supabase
+        .from("sparks")
+        .select("id, content_url, type")
+        .eq("board_id", boardId);
+
+      if (sparksError) {
+        console.error("Error fetching sparks:", sparksError);
+        Alert.alert("Error", "Failed to fetch sparks");
+        setLoading(false);
+        return;
+      }
+
+      if (!sparks || sparks.length === 0) {
+        Alert.alert("Error", "This Sparklette has no sparks to share");
+        setLoading(false);
+        return;
+      }
+
+      // Create community post
+      const { data: post, error: postError } = await supabase
+        .from("community_posts")
+        .insert({
+          user_id: userData.user.id,
+          type: "sparklette",
+          caption: null,
+        })
+        .select()
+        .single();
+
+      if (postError || !post) {
+        console.error("Error creating community post:", postError);
+        Alert.alert("Error", "Failed to share Sparklette");
+        setLoading(false);
+        return;
+      }
+
+      // Create attachments for each spark
+      const attachments = sparks.map((spark) => ({
+        post_id: post.id,
+        spark_id: spark.id,
+        title: boardName,
+        subtitle: null,
+        image_url: spark.content_url,
+        spotify_url: null,
+        media_type: "spark" as const,
+      }));
+
+      const { error: attachmentsError } = await supabase
+        .from("community_attachments")
+        .insert(attachments);
+
+      if (attachmentsError) {
+        console.error("Error creating attachments:", attachmentsError);
+        // Try to delete the post if attachments failed
+        await supabase.from("community_posts").delete().eq("id", post.id);
+        Alert.alert("Error", "Failed to share Sparklette");
+        setLoading(false);
+        return;
+      }
+
+      setIsShared(true);
+      setSharedPostId(post.id);
+      Alert.alert("Success", "Sparklette shared to community!");
+      onClose();
+    } catch (error) {
+      console.error("Error sharing:", error);
+      Alert.alert("Error", "Failed to share Sparklette");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleUnshare() {
+    if (!sharedPostId) return;
+
+    Alert.alert(
+      "Unshare Sparklette",
+      `Are you sure you want to unshare "${boardName}" from the community?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Unshare",
+          style: "destructive",
+          onPress: async () => {
+            setLoading(true);
+            try {
+              // Delete attachments first
+              await supabase
+                .from("community_attachments")
+                .delete()
+                .eq("post_id", sharedPostId);
+
+              // Delete the post
+              const { error } = await supabase
+                .from("community_posts")
+                .delete()
+                .eq("id", sharedPostId);
+
+              if (error) {
+                console.error("Error unsharing:", error);
+                Alert.alert("Error", "Failed to unshare Sparklette");
+              } else {
+                setIsShared(false);
+                setSharedPostId(null);
+                Alert.alert("Success", "Sparklette unshared from community!");
+                onClose();
+              }
+            } catch (error) {
+              console.error("Error unsharing:", error);
+              Alert.alert("Error", "Failed to unshare Sparklette");
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -161,6 +363,26 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
                   <Ionicons name="create-outline" size={24} color={theme.colors.primary} />
                   <Text style={styles.menuItemText}>Rename Sparklette</Text>
                 </TouchableOpacity>
+
+                {isShared ? (
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={handleUnshare}
+                    disabled={loading}
+                  >
+                    <Ionicons name="share" size={24} color={theme.colors.primary} />
+                    <Text style={styles.menuItemText}>Unshare Sparklette</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={handleShare}
+                    disabled={loading}
+                  >
+                    <Ionicons name="share-outline" size={24} color={theme.colors.primary} />
+                    <Text style={styles.menuItemText}>Share Sparklette</Text>
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={styles.menuItem}

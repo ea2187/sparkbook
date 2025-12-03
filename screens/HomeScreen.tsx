@@ -51,18 +51,25 @@ const HomeScreen: FC = () => {
         return;
       }
 
-      // Fetch preview images for each board (first 4 sparks)
+      // Fetch preview images for each board (first 4 sparks with valid content_url)
       const boardsWithPreviews = await Promise.all(
         (boardsData || []).map(async (board) => {
+          // Fetch more sparks to ensure we get 4 valid ones (some might have null content_url)
           const { data: sparks } = await supabase
             .from('sparks')
             .select('content_url')
             .eq('board_id', board.id)
+            .not('content_url', 'is', null)
             .limit(4);
+
+          // Filter out empty strings and ensure we only use valid image URLs
+          const thumbnail_urls = sparks
+            ?.map(s => s.content_url)
+            .filter((url): url is string => url != null && url !== '') || [];
 
           return {
             ...board,
-            thumbnail_urls: sparks?.map(s => s.content_url) || [],
+            thumbnail_urls,
           };
         })
       );
@@ -227,6 +234,7 @@ const HomeScreen: FC = () => {
               previewImages={board.thumbnail_urls}
               onPress={() => handleBoardPress(board)}
               onLongPress={() => handleBoardLongPress(board)}
+              onMenuPress={() => handleBoardLongPress(board)}
             />
           ))
         )}

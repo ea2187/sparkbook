@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
+  TextInput,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import theme from '../styles/theme';
@@ -18,7 +20,9 @@ import { COMMUNITY_USER_LOOKUP } from '../lib/communityUsers';
 const SocialScreen: FC = () => {
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadFeed();
@@ -29,6 +33,13 @@ const SocialScreen: FC = () => {
     const data = await fetchCommunityFeed();
     setPosts(data);
     setLoading(false);
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    const data = await fetchCommunityFeed();
+    setPosts(data);
+    setRefreshing(false);
   }
 
   function getUserInfo(userId: string) {
@@ -108,6 +119,7 @@ const SocialScreen: FC = () => {
         <TouchableOpacity 
           style={styles.starButton}
           onPress={() => toggleSavePost(post.id)}
+          activeOpacity={0.7}
         >
           <Ionicons 
             name={isPostSaved(post.id) ? "star" : "star-outline"} 
@@ -140,6 +152,7 @@ const SocialScreen: FC = () => {
         <TouchableOpacity 
           style={styles.starButton}
           onPress={() => toggleSavePost(post.id)}
+          activeOpacity={0.7}
         >
           <Ionicons 
             name={isPostSaved(post.id) ? "star" : "star-outline"} 
@@ -164,6 +177,7 @@ const SocialScreen: FC = () => {
         <TouchableOpacity 
           style={styles.starButton}
           onPress={() => toggleSavePost(post.id)}
+          activeOpacity={0.7}
         >
           <Ionicons 
             name={isPostSaved(post.id) ? "star" : "star-outline"} 
@@ -196,6 +210,7 @@ const SocialScreen: FC = () => {
         <TouchableOpacity 
           style={styles.starButton}
           onPress={() => toggleSavePost(post.id)}
+          activeOpacity={0.7}
         >
           <Ionicons 
             name={isPostSaved(post.id) ? "star" : "star-outline"} 
@@ -225,6 +240,38 @@ const SocialScreen: FC = () => {
     }
   }
 
+  // Filter posts based on search query
+  const filteredPosts = posts.filter(post => {
+    if (!searchQuery.trim()) return true;
+    
+    const query = searchQuery.toLowerCase().trim();
+    const userInfo = getUserInfo(post.user_id);
+    const userName = userInfo.name.toLowerCase();
+    const userInitial = userInfo.initial.toLowerCase();
+    const description = getPostDescription(post).toLowerCase();
+    
+    // Search by user name (exact match or partial)
+    if (userName.includes(query) || userName === query) return true;
+    
+    // Search by user initial
+    if (userInitial === query) return true;
+    
+    // Search by description
+    if (description.includes(query)) return true;
+    
+    // Search by caption
+    if (post.caption?.toLowerCase().includes(query)) return true;
+    
+    // Search by attachment titles/subtitles
+    const hasMatchingAttachment = post.attachments.some(attachment => {
+      const title = attachment.title?.toLowerCase() || '';
+      const subtitle = attachment.subtitle?.toLowerCase() || '';
+      return title.includes(query) || subtitle.includes(query);
+    });
+    
+    return hasMatchingAttachment;
+  });
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -240,14 +287,39 @@ const SocialScreen: FC = () => {
         <Text style={styles.headerSubtitle}>
           See what's creating sparks in the community
         </Text>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search users, posts..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor={theme.colors.textSecondary}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearButton}
+            >
+              <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+          />
+        }
       >
-        {posts.map((post) => {
+        {filteredPosts.map((post) => {
           const userInfo = getUserInfo(post.user_id);
           
           return (
@@ -273,6 +345,16 @@ const SocialScreen: FC = () => {
             </View>
           );
         })}
+
+        {filteredPosts.length === 0 && posts.length > 0 && (
+          <View style={styles.emptyState}>
+            <Ionicons name="search-outline" size={64} color={theme.colors.textLight} />
+            <Text style={styles.emptyStateText}>No posts found</Text>
+            <Text style={styles.emptyStateSubtext}>
+              Try adjusting your search terms
+            </Text>
+          </View>
+        )}
 
         {posts.length === 0 && (
           <View style={styles.emptyState}>
@@ -317,6 +399,29 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.md,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.light,
+    borderRadius: 12,
+    paddingHorizontal: theme.spacing.md,
+    height: 44,
+    marginTop: theme.spacing.sm,
+  },
+  searchIcon: {
+    marginRight: theme.spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+  },
+  clearButton: {
+    marginLeft: theme.spacing.xs,
+    padding: 2,
   },
   scrollView: {
     flex: 1,

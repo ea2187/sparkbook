@@ -1,5 +1,6 @@
 import React, { FC } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import theme from '../styles/theme';
 
 // Placeholder images for empty boards
@@ -15,6 +16,7 @@ interface BoardPreviewCardProps {
   previewImages?: string[];
   onPress: () => void;
   onLongPress?: () => void;
+  onMenuPress?: () => void;
 }
 
 const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
@@ -22,6 +24,7 @@ const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
   previewImages = [],
   onPress,
   onLongPress,
+  onMenuPress,
 }) => {
   // Use provided images or fallback to placeholders
   const displayImages = previewImages.length > 0 
@@ -55,6 +58,18 @@ const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
       <Text style={styles.title} numberOfLines={1}>
         {title}
       </Text>
+
+      {/* Three dots menu icon */}
+      <TouchableOpacity 
+        style={styles.menuIcon}
+        onPress={(e) => {
+          e.stopPropagation();
+          onMenuPress?.();
+        }}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 };
@@ -66,6 +81,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: theme.spacing.md,
     ...theme.shadows.md,
+    position: 'relative',
   },
   previewRow: {
     flexDirection: 'row',
@@ -92,6 +108,12 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.medium,
     color: theme.colors.textPrimary,
     marginTop: 4,
+    paddingRight: 30,
+  },
+  menuIcon: {
+    position: 'absolute',
+    bottom: 14,
+    right: 14,
   },
 });
 
