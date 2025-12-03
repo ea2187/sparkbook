@@ -31,14 +31,6 @@ const AddMusicDetailsScreen: FC = () => {
   const albumImage = track.album?.images?.[0]?.url;
   const artistNames = track.artists?.map((a: any) => a.name).join(', ') || 'Unknown Artist';
 
-  useEffect(() => {
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
-  }, [sound]);
-
   async function openInSpotify() {
     const spotifyUri = track.uri; // e.g., spotify:track:xxxxx
     const spotifyUrl = track.external_urls?.spotify; // Web URL
@@ -117,7 +109,7 @@ const AddMusicDetailsScreen: FC = () => {
               onPress={openInSpotify}
             >
               <Ionicons
-                name="logo-spotify"
+                name="musical-notes"
                 size={32}
                 color={theme.colors.white}
               />

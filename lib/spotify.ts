@@ -5,7 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 WebBrowser.maybeCompleteAuthSession();
 
 const SPOTIFY_CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID'; // Replace with your Spotify Client ID
-const SPOTIFY_REDIRECT_URI = AuthSession.makeRedirectUri({ useProxy: true });
+const SPOTIFY_REDIRECT_URI = AuthSession.makeRedirectUri({});
 
 // Log the redirect URI - you need to add this to your Spotify app settings
 console.log('📱 Spotify Redirect URI:', SPOTIFY_REDIRECT_URI);

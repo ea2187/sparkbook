@@ -281,10 +281,9 @@ export default function DraggableSpark({
             selected && styles.selectedFile,
           ]}
         >
-          <Ionicons 
-            name="document-text" 
-            size={48} 
-            color={theme.colors.primary} 
+          <Image
+            source={require("../assets/file.png")}
+            style={styles.fileIcon}
           />
           <Text style={styles.fileName} numberOfLines={2}>
             {spark.title}
@@ -539,6 +538,11 @@ const styles = StyleSheet.create({
   selectedFile: {
     borderWidth: 3,
     borderColor: "#3A7AFE",
+  },
+  fileIcon: {
+    width: 48,
+    height: 48,
+    resizeMode: "contain",
   },
   fileName: {
     fontSize: 12,
