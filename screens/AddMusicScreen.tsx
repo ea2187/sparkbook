@@ -162,7 +162,7 @@ const AddMusicScreen: FC = () => {
               getSpotifyAuth();
             }}
           >
-            <Ionicons name="logo-spotify" size={24} color={theme.colors.white} />
+            <Ionicons name="musical-notes" size={24} color={theme.colors.white} />
             <Text style={styles.spotifyButtonText}>Connect Spotify</Text>
           </TouchableOpacity>
         </View>

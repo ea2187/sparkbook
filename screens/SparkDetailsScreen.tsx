@@ -14,7 +14,7 @@ import {
   ScrollView,
   Linking,
 } from "react-native";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { StackScreenProps } from "@react-navigation/stack";
 import { HomeStackParamList } from "../types";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -22,7 +22,7 @@ import { supabase } from "../lib/supabase";
 import theme from "../styles/theme";
 import { useFocusEffect } from "@react-navigation/native";
 
-type Props = NativeStackScreenProps<HomeStackParamList, "SparkDetails">;
+type Props = StackScreenProps<HomeStackParamList, "SparkDetails">;
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -328,7 +328,7 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
                   style={styles.spotifyButton}
                   onPress={toggleAudioPlayback}
                 >
-                  <Ionicons name="logo-spotify" size={24} color="#FFF" />
+                  <Ionicons name="musical-notes" size={24} color="#FFF" />
                   <Text style={styles.spotifyButtonText}>Open in Spotify</Text>
                 </TouchableOpacity>
               </View>
@@ -362,6 +362,37 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
             );
           }
         })()}
+
+        {spark.type === 'image' && spark.text_content && 
+          !spark.text_content.startsWith('{') && 
+          spark.text_content.includes('/') && 
+          spark.title && (
+          <View style={styles.fileContainer}>
+            <View style={styles.filePreview}>
+              <Image
+                source={require("../assets/file.png")}
+                style={styles.filePreviewIcon}
+              />
+              <Text style={styles.filePreviewName}>{spark.title}</Text>
+              <Text style={styles.filePreviewType}>
+                {spark.text_content?.split('/').pop()?.toUpperCase() || 'FILE'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.downloadButton}
+              onPress={() => {
+                if (spark.content_url) {
+                  Linking.openURL(spark.content_url).catch(err => {
+                    Alert.alert('Error', 'Could not open file');
+                  });
+                }
+              }}
+            >
+              <Ionicons name="download-outline" size={24} color="#FFF" />
+              <Text style={styles.downloadButtonText}>Open File</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
       {/* Name Section */}
       <View style={styles.nameSection}>
@@ -643,6 +674,55 @@ const styles = StyleSheet.create({
     ...theme.shadows.md,
   },
   spotifyButtonText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: "#FFF",
+  },
+  fileContainer: {
+    padding: 20,
+    backgroundColor: "#F5F5F5",
+    alignItems: "center",
+    gap: 20,
+  },
+  filePreview: {
+    alignItems: "center",
+    gap: 16,
+    paddingVertical: 40,
+    backgroundColor: "#F0F4FF",
+    borderRadius: 16,
+    width: "100%",
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  filePreviewIcon: {
+    width: 80,
+    height: 80,
+    resizeMode: "contain",
+  },
+  filePreviewName: {
+    fontSize: 18,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  filePreviewType: {
+    fontSize: 14,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.textSecondary,
+    textTransform: "uppercase",
+  },
+  downloadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
+    ...theme.shadows.md,
+  },
+  downloadButtonText: {
     fontSize: 16,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: "#FFF",
