@@ -38,7 +38,10 @@ const AddMusicScreen: FC = () => {
   const accessToken = authResponse?.access_token;
 
   useEffect(() => {
+    console.log('Auth state changed - authResponse:', !!authResponse);
+    console.log('Access token:', accessToken ? 'present' : 'missing');
     if (accessToken) {
+      console.log('Token (first 20 chars):', accessToken.substring(0, 20) + '...');
       loadTopTracks();
       if (!boardId) {
         fetchBoards();
@@ -195,6 +198,17 @@ const AddMusicScreen: FC = () => {
           </TouchableOpacity>
         )}
       </View>
+
+      <TouchableOpacity
+        style={styles.reconnectButton}
+        onPress={() => {
+          console.log('Reconnect pressed');
+          getSpotifyAuth();
+        }}
+      >
+        <Ionicons name="refresh" size={16} color={theme.colors.primary} />
+        <Text style={styles.reconnectText}>Reconnect Spotify</Text>
+      </TouchableOpacity>
 
       {!boardId && (
         <View style={styles.boardSelectorContainer}>
@@ -448,6 +462,25 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textSecondary,
     marginTop: 4,
+  },
+  reconnectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    backgroundColor: 'rgba(0, 122, 255, 0.05)',
+  },
+  reconnectText: {
+    fontSize: 14,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.primary,
   },
 });
 

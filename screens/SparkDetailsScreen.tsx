@@ -38,6 +38,9 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
   const [tempSize, setTempSize] = useState({ width: 160, height: 160 });
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [editedNoteTitle, setEditedNoteTitle] = useState("");
+  const [editedNoteText, setEditedNoteText] = useState("");
 
   useFocusEffect(
     useCallback(() => {
@@ -72,6 +75,8 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
     setSpark(data);
     setEditedName(data.name || "");
     setTempSize({ width: data.width || 160, height: data.height || 160 });
+    setEditedNoteTitle(data.title || "");
+    setEditedNoteText(data.text_content || "");
   }
 
   async function handleSaveName() {
@@ -95,6 +100,36 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
 
     setSpark({ ...spark, name: editedName });
     setIsEditing(false);
+  }
+
+  async function handleSaveNote() {
+    if (!editedNoteText.trim()) {
+      Alert.alert("Error", "Note text cannot be empty");
+      return;
+    }
+
+    setSaving(true);
+    const { error } = await supabase
+      .from("sparks")
+      .update({ 
+        title: editedNoteTitle.trim() || "Untitled Note",
+        text_content: editedNoteText.trim()
+      })
+      .eq("id", sparkId);
+
+    setSaving(false);
+
+    if (error) {
+      Alert.alert("Error", "Failed to update note");
+      return;
+    }
+
+    setSpark({ 
+      ...spark, 
+      title: editedNoteTitle.trim() || "Untitled Note",
+      text_content: editedNoteText.trim()
+    });
+    setIsEditingNote(false);
   }
 
   function handleDeletePress() {
@@ -280,14 +315,73 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
 
         {spark.type === 'note' && (
           <View style={styles.noteContainer}>
-            <View style={styles.noteCard}>
-              {spark.title && (
-                <Text style={styles.noteTitle}>{spark.title}</Text>
-              )}
-              {spark.text_content && (
-                <Text style={styles.noteBody}>{spark.text_content}</Text>
-              )}
-            </View>
+            {!isEditingNote ? (
+              <>
+                <View style={styles.noteCard}>
+                  {spark.title && (
+                    <Text style={styles.noteTitle}>{spark.title}</Text>
+                  )}
+                  {spark.text_content && (
+                    <Text style={styles.noteBody}>{spark.text_content}</Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={() => {
+                    setEditedNoteTitle(spark.title || "");
+                    setEditedNoteText(spark.text_content || "");
+                    setIsEditingNote(true);
+                  }}
+                >
+                  <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
+                  <Text style={styles.editButtonText}>Edit Note</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.noteEditContainer}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Title (optional)</Text>
+                  <TextInput
+                    style={styles.titleInput}
+                    value={editedNoteTitle}
+                    onChangeText={setEditedNoteTitle}
+                    placeholder="Note title..."
+                    placeholderTextColor={theme.colors.textLight}
+                  />
+                </View>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={styles.inputLabel}>Note</Text>
+                  <TextInput
+                    style={[styles.noteTextInput, { flex: 1 }]}
+                    value={editedNoteText}
+                    onChangeText={setEditedNoteText}
+                    placeholder="Write your note..."
+                    placeholderTextColor={theme.colors.textLight}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+                <View style={styles.editActions}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.cancelButton]}
+                    onPress={() => setIsEditingNote(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.saveButton]}
+                    onPress={handleSaveNote}
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -576,6 +670,7 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: "#F5F5F5",
     minHeight: 200,
+    flex: 1,
   },
   noteCard: {
     backgroundColor: "#FFFBEA",
@@ -596,6 +691,88 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textPrimary,
     lineHeight: 24,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.background,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    minHeight: 44,
+  },
+  editButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.primary,
+  },
+  noteEditContainer: {
+    flex: 1,
+    gap: 12,
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  titleInput: {
+    backgroundColor: theme.colors.background,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    color: theme.colors.textPrimary,
+    minHeight: 44,
+  },
+  noteTextInput: {
+    backgroundColor: theme.colors.background,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    color: theme.colors.textPrimary,
+    minHeight: 200,
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 'auto',
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  cancelButton: {
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  saveButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   audioContainer: {
     padding: 20,
@@ -765,28 +942,6 @@ const styles = StyleSheet.create({
   editButtons: {
     flexDirection: "row",
     gap: 12,
-  },
-  editButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  cancelButton: {
-    backgroundColor: theme.colors.light,
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontFamily: theme.typography.fontFamily.semiBold,
-    color: theme.colors.textPrimary,
-  },
-  saveButton: {
-    backgroundColor: theme.colors.primary,
-  },
-  saveButtonText: {
-    fontSize: 14,
-    fontFamily: theme.typography.fontFamily.semiBold,
-    color: theme.colors.white,
   },
   infoSection: {
     padding: 20,

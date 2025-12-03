@@ -85,11 +85,11 @@ const styles = StyleSheet.create({
   },
   container: {
     backgroundColor: theme.colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    padding: 20,
+    borderTopLeftRadius: theme.borderRadius.modal,
+    borderTopRightRadius: theme.borderRadius.modal,
+    borderBottomLeftRadius: theme.borderRadius.modal,
+    borderBottomRightRadius: theme.borderRadius.modal,
+    padding: theme.spacing.lg,
     marginBottom: 80,
   },
   header: {
