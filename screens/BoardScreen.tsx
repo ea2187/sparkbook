@@ -217,9 +217,9 @@ const BoardScreen: FC = () => {
       });
   }
 
-  // Handle tap to deselect
+  // Handle tap - toggle selection (select if not selected, deselect if already selected)
   function handleSparkTap(id: string) {
-    setSelectedSparkId(null);
+    setSelectedSparkId(prev => prev === id ? null : id);
   }
 
   // Handle long press to view details
@@ -583,6 +583,7 @@ const BoardScreen: FC = () => {
               selected={selectedSparkId === spark.id}
               onSelect={setSelectedSparkId}
               onMoveEnd={handleSparkMove}
+              onResize={handleSparkResize}
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
               onTap={handleSparkTap}

@@ -7,6 +7,8 @@ import {
   Text,
   View,
   Linking,
+  TouchableOpacity,
+  GestureResponderEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -17,6 +19,7 @@ type DraggableSparkProps = {
   selected: boolean;
   onSelect: (id: string) => void;
   onMoveEnd: (id: string, x: number, y: number) => void;
+  onResize?: (id: string, width: number, height: number) => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
   onTap?: (id: string) => void;
@@ -28,15 +31,22 @@ export default function DraggableSpark({
   selected,
   onSelect,
   onMoveEnd,
+  onResize,
   onDragStart,
   onDragEnd,
   onTap,
   onLongPress,
 }: DraggableSparkProps) {
   const isDraggingRef = useRef(false);
+  const isResizingRef = useRef(false);
+  const isPinchingRef = useRef(false);
   const tapStartTime = useRef(0);
   const hasMoved = useRef(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resizeStartSize = useRef({ width: 0, height: 0 });
+  const resizeStartPos = useRef({ x: 0, y: 0 });
+  const pinchStartDistance = useRef(0);
+  const pinchStartSize = useRef({ width: 0, height: 0 });
 
   const isImage = spark.type === "image";
   const isNote = spark.type === "note";
@@ -52,10 +62,18 @@ export default function DraggableSpark({
     new Animated.ValueXY({ x: spark.x, y: spark.y })
   ).current;
 
-  const [size] = useState({
+  const [size, setSize] = useState({
     width: spark.width || 160,
     height: spark.height || 160,
   });
+  const [cropMode, setCropMode] = useState(false);
+
+  // Update size when spark prop changes
+  useEffect(() => {
+    if (spark.width && spark.height) {
+      setSize({ width: spark.width, height: spark.height });
+    }
+  }, [spark.width, spark.height]);
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -157,11 +175,133 @@ export default function DraggableSpark({
     }
   }
 
-  const panResponder = useRef(
-    PanResponder.create({
+  // Resize state
+  const currentResizeSize = useRef({ width: size.width, height: size.height });
+  const resizeHandleType = useRef<'corner' | 'side' | null>(null);
+  const resizeCorner = useRef<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | null>(null);
+  const resizeSide = useRef<'top' | 'bottom' | 'left' | 'right' | null>(null);
+  
+  useEffect(() => {
+    currentResizeSize.current = size;
+  }, [size]);
+
+  function createResizePanResponder(
+    handleType: 'corner' | 'side',
+    corner?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right',
+    side?: 'top' | 'bottom' | 'left' | 'right'
+  ) {
+    return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
 
       onPanResponderGrant: () => {
+        isResizingRef.current = true;
+        resizeHandleType.current = handleType;
+        if (corner) resizeCorner.current = corner;
+        if (side) resizeSide.current = side;
+        resizeStartSize.current = { width: size.width, height: size.height };
+        resizeStartPos.current = {
+          x: (position.x as any)._value,
+          y: (position.y as any)._value,
+        };
+        onSelect(spark.id);
+        onDragStart?.();
+      },
+
+      onPanResponderMove: (_, gesture) => {
+        if (!isResizingRef.current) return;
+
+        let newWidth = resizeStartSize.current.width;
+        let newHeight = resizeStartSize.current.height;
+        const aspectRatio = resizeStartSize.current.width / resizeStartSize.current.height;
+
+        if (handleType === 'corner' && corner) {
+          // Corner handles: maintain aspect ratio if locked, otherwise free resize
+          const deltaX = gesture.dx;
+          const deltaY = gesture.dy;
+          
+          // Calculate which direction to resize based on corner
+          let widthDelta = 0;
+          let heightDelta = 0;
+          
+          if (corner === 'bottom-right') {
+            widthDelta = deltaX;
+            heightDelta = deltaY;
+          } else if (corner === 'bottom-left') {
+            widthDelta = -deltaX;
+            heightDelta = deltaY;
+          } else if (corner === 'top-right') {
+            widthDelta = deltaX;
+            heightDelta = -deltaY;
+          } else if (corner === 'top-left') {
+            widthDelta = -deltaX;
+            heightDelta = -deltaY;
+          }
+
+          if (!cropMode) {
+            // Maintain aspect ratio - use the larger change
+            const absWidthDelta = Math.abs(widthDelta);
+            const absHeightDelta = Math.abs(heightDelta);
+            
+            if (absWidthDelta > absHeightDelta) {
+              newWidth = Math.max(80, resizeStartSize.current.width + widthDelta);
+              newHeight = newWidth / aspectRatio;
+            } else {
+              newHeight = Math.max(80, resizeStartSize.current.height + heightDelta);
+              newWidth = newHeight * aspectRatio;
+            }
+          } else {
+            // Crop mode: free resize to crop/zoom the image
+            newWidth = Math.max(80, resizeStartSize.current.width + widthDelta);
+            newHeight = Math.max(80, resizeStartSize.current.height + heightDelta);
+          }
+        } else if (handleType === 'side' && side) {
+          // Side handles: allow non-proportional resizing
+          if (side === 'right') {
+            newWidth = Math.max(80, resizeStartSize.current.width + gesture.dx);
+          } else if (side === 'left') {
+            newWidth = Math.max(80, resizeStartSize.current.width - gesture.dx);
+          } else if (side === 'bottom') {
+            newHeight = Math.max(80, resizeStartSize.current.height + gesture.dy);
+          } else if (side === 'top') {
+            newHeight = Math.max(80, resizeStartSize.current.height - gesture.dy);
+          }
+        }
+        
+        setSize({ width: newWidth, height: newHeight });
+        currentResizeSize.current = { width: newWidth, height: newHeight };
+      },
+
+      onPanResponderRelease: () => {
+        if (isResizingRef.current && onResize) {
+          // Round to integers to fix database error
+          const roundedWidth = Math.round(currentResizeSize.current.width);
+          const roundedHeight = Math.round(currentResizeSize.current.height);
+          onResize(spark.id, roundedWidth, roundedHeight);
+        }
+        isResizingRef.current = false;
+        resizeHandleType.current = null;
+        resizeCorner.current = null;
+        resizeSide.current = null;
+        onDragEnd?.();
+      },
+    });
+  }
+
+  const resizeHandles = {
+    'top-left': useRef(createResizePanResponder('corner', 'top-left')),
+    'top-right': useRef(createResizePanResponder('corner', 'top-right')),
+    'bottom-left': useRef(createResizePanResponder('corner', 'bottom-left')),
+    'bottom-right': useRef(createResizePanResponder('corner', 'bottom-right')),
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !isResizingRef.current && !isPinchingRef.current,
+
+      onPanResponderGrant: () => {
+        if (isResizingRef.current || isPinchingRef.current) return;
+        
         onSelect(spark.id);
         tapStartTime.current = Date.now();
         hasMoved.current = false;
@@ -263,14 +403,62 @@ export default function DraggableSpark({
       ]}
     >
       {isImage && !isFile && (
-        <Image
-          source={{ uri: spark.content_url }}
-          style={[
-            styles.image,
-            { width: size.width, height: size.height },
-            selected && styles.selected,
-          ]}
-        />
+        <View style={{ position: 'relative' }}>
+          <Image
+            source={{ uri: spark.content_url }}
+            style={[
+              styles.image,
+              { width: size.width, height: size.height },
+              selected && styles.selected,
+            ]}
+          />
+          {selected && (
+            <>
+              {/* Crop toggle button */}
+              <TouchableOpacity
+                style={[styles.cropButton, { top: -8, left: size.width / 2 - 18 }]}
+                onPress={() => setCropMode(!cropMode)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="expand-outline"
+                  size={20}
+                  color={cropMode ? "#10B981" : "#3A7AFE"}
+                />
+              </TouchableOpacity>
+
+              {/* Corner handles - only show in crop mode for non-proportional resize */}
+              {cropMode && (
+                <>
+                  <View
+                    {...resizeHandles['top-left'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  <View
+                    {...resizeHandles['top-right'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  <View
+                    {...resizeHandles['bottom-left'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                  <View
+                    {...resizeHandles['bottom-right'].current.panHandlers}
+                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
+                  >
+                    <View style={styles.resizeHandleInner} />
+                  </View>
+                </>
+              )}
+            </>
+          )}
+        </View>
       )}
 
       {isFile && (
@@ -556,5 +744,48 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: "center",
     textTransform: "uppercase",
+  },
+  resizeHandle: {
+    position: "absolute",
+    zIndex: 10,
+  },
+  resizeHandleCorner: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#3A7AFE",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  resizeHandleSide: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#10B981",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  resizeHandleInner: {
+    width: 8,
+    height: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 4,
+  },
+  cropButton: {
+    position: "absolute",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: "#3A7AFE",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+    ...theme.shadows.md,
   },
 });
