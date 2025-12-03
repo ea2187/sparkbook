@@ -51,6 +51,7 @@ const BoardScreen: FC = () => {
   const [boardName, setBoardName] = useState("Board");
   const [sparks, setSparks] = useState<any[]>([]);
   const [selectedSparkId, setSelectedSparkId] = useState<string | null>(null);
+  const [sparkWithDeleteButton, setSparkWithDeleteButton] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [quickAddVisible, setQuickAddVisible] = useState(false);
@@ -217,17 +218,26 @@ const BoardScreen: FC = () => {
       });
   }
 
-  // Handle tap to deselect
+  // Handle tap to open details
   function handleSparkTap(id: string) {
-    setSelectedSparkId(null);
-  }
-
-  // Handle long press to view details
-  function handleSparkLongPress(id: string) {
+    // If delete button is showing, hide it
+    if (sparkWithDeleteButton) {
+      setSparkWithDeleteButton(null);
+      return;
+    }
+    // Otherwise open details
     navigation.navigate("SparkDetails", { sparkId: id, boardId });
   }
 
+  // Handle long press to show delete button
+  function handleSparkLongPress(id: string) {
+    setSparkWithDeleteButton(id);
+  }
+
   async function handleDeleteSpark(id: string) {
+    // Hide delete button
+    setSparkWithDeleteButton(null);
+    
     // Save state before deletion
     const currentState = [...sparks];
     
@@ -474,55 +484,54 @@ const BoardScreen: FC = () => {
     <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <View style={styles.leftHeaderContainer}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={26} color={theme.colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
+        {/* Home Button */}
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.navigate('Home')}
+        >
+          <Ionicons name="home" size={24} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
+        
+        {/* Title - centered with flex */}
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{boardName}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{boardName}</Text>
           {uploading && (
             <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
           )}
         </View>
+        
+        {/* Right Actions */}
         <View style={styles.rightHeaderContainer}>
           {/* UNDO/REDO BUTTONS */}
-          <View style={styles.undoRedoContainer}>
-            <TouchableOpacity 
-              style={[styles.undoRedoButton, historyIndex <= 0 && styles.undoRedoButtonDisabled]}
-              onPress={handleUndo}
-              disabled={historyIndex <= 0}
-            >
-              <Ionicons 
-                name="arrow-undo" 
-                size={20} 
-                color={historyIndex <= 0 ? theme.colors.textLight : theme.colors.textPrimary} 
-              />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.undoRedoButton, historyIndex >= history.length - 1 && styles.undoRedoButtonDisabled]}
-              onPress={handleRedo}
-              disabled={historyIndex >= history.length - 1}
-            >
-              <Ionicons 
-                name="arrow-redo" 
-                size={20} 
-                color={historyIndex >= history.length - 1 ? theme.colors.textLight : theme.colors.textPrimary} 
-              />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity 
+            style={[styles.undoRedoButton, historyIndex <= 0 && styles.undoRedoButtonDisabled]}
+            onPress={handleUndo}
+            disabled={historyIndex <= 0}
+          >
+            <Ionicons 
+              name="arrow-undo" 
+              size={20} 
+              color={historyIndex <= 0 ? theme.colors.textLight : theme.colors.textPrimary} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.undoRedoButton, historyIndex >= history.length - 1 && styles.undoRedoButtonDisabled]}
+            onPress={handleRedo}
+            disabled={historyIndex >= history.length - 1}
+          >
+            <Ionicons 
+              name="arrow-redo" 
+              size={20} 
+              color={historyIndex >= history.length - 1 ? theme.colors.textLight : theme.colors.textPrimary} 
+            />
+          </TouchableOpacity>
           {/* ORGANIZE BUTTON */}
-          <View style={styles.organizeContainer}>
-            <TouchableOpacity
-              style={styles.organizeButton}
-              onPress={() => setOrganizeModalVisible(true)}
-            >
-              <Ionicons name="sparkles" size={22} color={theme.colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.organizeButton}
+            onPress={() => setOrganizeModalVisible(true)}
+          >
+            <Ionicons name="sparkles" size={22} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -569,11 +578,14 @@ const BoardScreen: FC = () => {
 
         {/* SPARKS */}
         <View style={styles.canvasContent}>
-          {/* Tap background to deselect */}
+          {/* Tap background to deselect and hide delete button */}
           <TouchableOpacity
             style={styles.canvasBackground}
             activeOpacity={1}
-            onPress={() => setSelectedSparkId(null)}
+            onPress={() => {
+              setSelectedSparkId(null);
+              setSparkWithDeleteButton(null);
+            }}
           />
 
           {sparks.map((spark) => (
@@ -587,6 +599,8 @@ const BoardScreen: FC = () => {
               onDragEnd={handleDragEnd}
               onTap={handleSparkTap}
               onLongPress={handleSparkLongPress}
+              onDelete={handleDeleteSpark}
+              showDeleteButton={sparkWithDeleteButton === spark.id}
             />
           ))}
 
@@ -737,50 +751,42 @@ const BoardScreen: FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.light },
   header: {
-  flexDirection: "row",
-  alignItems: "center",
-  paddingTop: 60,
-  paddingHorizontal: 20,
-  height: 110,
-  backgroundColor: theme.colors.white,
-  zIndex: 10000,
-  elevation: 12,
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-},
-
-  leftHeaderContainer: {
-    position: "absolute",
-    top: 65,
-    left: 20,
-    zIndex: 10001,
-  },
-  rightHeaderContainer: {
-    position: "absolute",
-    top: 65,
-    right: 20,
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    zIndex: 10001,
-  },
-  backButton: {
-    zIndex: 10001,
-  },
-  headerCenter: {
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: theme.colors.white,
+    zIndex: 10000,
+    elevation: 12,
     position: "absolute",
-    top: 65,
+    top: 0,
     left: 0,
     right: 0,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerCenter: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  rightHeaderContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: "600",
+    fontSize: theme.typography.fontSize.xl,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
   },
   canvasContainer: { width: BOARD_WIDTH, height: BOARD_HEIGHT},
   gridContainer: { ...StyleSheet.absoluteFillObject },
@@ -803,44 +809,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   emptyStateText: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginTop: 12,
+    fontSize: theme.typography.fontSize.xl,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+    marginTop: theme.spacing.sm,
   },
   emptyStateSubtext: {
-    fontSize: 14,
-    color: "#777",
-    marginTop: 4,
-  },
-  undoRedoContainer: {
-    flexDirection: "row",
-    gap: 6,
-    zIndex: 10001,
-    alignItems: "center",
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    marginTop: theme.spacing.xs,
   },
   undoRedoButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     backgroundColor: theme.colors.white,
-    borderRadius: 18,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    ...theme.shadows.md,
+    ...theme.shadows.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   undoRedoButtonDisabled: {
     opacity: 0.4,
   },
-  organizeContainer: {
-    zIndex: 10001,
-  },
   organizeButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     backgroundColor: theme.colors.white,
-    borderRadius: 20,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    ...theme.shadows.md,
+    ...theme.shadows.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   bottomBar: {
     position: "absolute",
@@ -863,15 +866,15 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   bottomBarIconImage: { 
-    width: 36, 
-    height: 36,
+    width: 32, 
+    height: 32,
     resizeMode: "contain",
-    marginBottom: 6,
+    marginBottom: theme.spacing.xs,
   },
   bottomBarLabel: {
-    fontSize: 11,
+    fontSize: theme.typography.fontSize.xs,
     color: theme.colors.textPrimary,
-    marginTop: 4,
+    marginTop: theme.spacing.xs,
     fontFamily: theme.typography.fontFamily.medium,
     letterSpacing: 0.2,
   },
@@ -917,21 +920,21 @@ const styles = StyleSheet.create({
     ...theme.shadows.lg,
   },
   renameModalTitle: {
-    fontSize: 20,
+    fontSize: theme.typography.fontSize.xl,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.textPrimary,
-    marginBottom: 16,
+    marginBottom: theme.spacing.md,
   },
   renameModalInput: {
     backgroundColor: theme.colors.light,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textPrimary,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
-    marginBottom: 20,
+    borderColor: theme.colors.border,
+    marginBottom: theme.spacing.lg,
   },
   renameModalButtons: {
     flexDirection: "row",
@@ -947,7 +950,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.light,
   },
   renameModalButtonCancelText: {
-    fontSize: 16,
+    fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.textPrimary,
   },
@@ -955,7 +958,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
   },
   renameModalButtonSaveText: {
-    fontSize: 16,
+    fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.white,
   },

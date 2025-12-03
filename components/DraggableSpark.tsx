@@ -7,6 +7,7 @@ import {
   Text,
   View,
   Linking,
+  TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -21,6 +22,8 @@ type DraggableSparkProps = {
   onDragEnd?: () => void;
   onTap?: (id: string) => void;
   onLongPress?: (id: string) => void;
+  onDelete?: (id: string) => void;
+  showDeleteButton: boolean;
 };
 
 export default function DraggableSpark({
@@ -32,6 +35,8 @@ export default function DraggableSpark({
   onDragEnd,
   onTap,
   onLongPress,
+  onDelete,
+  showDeleteButton,
 }: DraggableSparkProps) {
   const isDraggingRef = useRef(false);
   const tapStartTime = useRef(0);
@@ -406,7 +411,21 @@ export default function DraggableSpark({
             </View>
           );
         }
-      })()}
+        })()}
+
+      {/* Delete Button - shows on long press */}
+      {showDeleteButton && onDelete && (
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            onDelete(spark.id);
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="trash" size={20} color="#FFF" />
+        </TouchableOpacity>
+      )}
     </Animated.View>
   );
 }
@@ -556,5 +575,18 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: "center",
     textTransform: "uppercase",
+  },
+  deleteButton: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#EF4444",
+    justifyContent: "center",
+    alignItems: "center",
+    ...theme.shadows.lg,
+    zIndex: 1000,
   },
 });
