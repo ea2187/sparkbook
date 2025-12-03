@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
+import theme from "../styles/theme";
 
 type DraggableSparkProps = {
   spark: any;
@@ -40,6 +41,12 @@ export default function DraggableSpark({
   const isImage = spark.type === "image";
   const isNote = spark.type === "note";
   const isAudio = spark.type === "audio";
+  
+  // Check if this is a file (has mime type in text_content and title)
+  const isFile = isImage && spark.text_content && 
+    !spark.text_content.startsWith('{') && 
+    spark.text_content.includes('/') && 
+    spark.title;
 
   const position = useRef(
     new Animated.ValueXY({ x: spark.x, y: spark.y })
@@ -219,6 +226,14 @@ export default function DraggableSpark({
             // For audio sparks, toggle playback on tap (don't call onTap)
             toggleAudioPlayback();
             return; // Early return to prevent onTap call
+          } else if (isFile) {
+            // For file sparks, open the file URL
+            if (spark.content_url) {
+              Linking.openURL(spark.content_url).catch(err => {
+                console.error('Error opening file:', err);
+              });
+            }
+            return;
           } else if (onTap) {
             // For other sparks, call onTap
             onTap(spark.id);
@@ -247,7 +262,7 @@ export default function DraggableSpark({
         },
       ]}
     >
-      {isImage && (
+      {isImage && !isFile && (
         <Image
           source={{ uri: spark.content_url }}
           style={[
@@ -256,6 +271,28 @@ export default function DraggableSpark({
             selected && styles.selected,
           ]}
         />
+      )}
+
+      {isFile && (
+        <View
+          style={[
+            styles.fileCard,
+            { width: size.width, height: size.height },
+            selected && styles.selectedFile,
+          ]}
+        >
+          <Ionicons 
+            name="document-text" 
+            size={48} 
+            color={theme.colors.primary} 
+          />
+          <Text style={styles.fileName} numberOfLines={2}>
+            {spark.title}
+          </Text>
+          <Text style={styles.fileType} numberOfLines={1}>
+            {spark.text_content?.split('/').pop()?.toUpperCase() || 'FILE'}
+          </Text>
+        </View>
       )}
 
       {isNote && (
@@ -488,5 +525,32 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "400",
     textAlign: "center",
+  },
+  fileCard: {
+    borderRadius: 14,
+    backgroundColor: "#F0F4FF",
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    gap: 8,
+  },
+  selectedFile: {
+    borderWidth: 3,
+    borderColor: "#3A7AFE",
+  },
+  fileName: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.textPrimary,
+    textAlign: "center",
+  },
+  fileType: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    textTransform: "uppercase",
   },
 });

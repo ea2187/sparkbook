@@ -148,6 +148,11 @@ const HomeScreen: FC = () => {
     }
   }
 
+  // Filter boards based on search query
+  const filteredBoards = boards.filter(board =>
+    board.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -202,14 +207,20 @@ const HomeScreen: FC = () => {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
           </View>
-        ) : boards.length === 0 ? (
+        ) : filteredBoards.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="albums-outline" size={64} color={theme.colors.textLight} />
-            <Text style={styles.emptyTitle}>No boards yet</Text>
-            <Text style={styles.emptySubtitle}>Tap "Add sparklette" to create your first board</Text>
+            <Text style={styles.emptyTitle}>
+              {searchQuery ? 'No boards found' : 'No boards yet'}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {searchQuery 
+                ? `No boards match "${searchQuery}"`
+                : 'Tap "Add sparklette" to create your first board'}
+            </Text>
           </View>
         ) : (
-          boards.map((board) => (
+          filteredBoards.map((board) => (
             <BoardPreviewCard
               key={board.id}
               title={board.name}

@@ -180,11 +180,11 @@ const styles = StyleSheet.create({
   },
   centerButton: {
     position: "absolute",
-    bottom: 32,
+    bottom: 48,
     alignSelf: "center",
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
@@ -192,9 +192,10 @@ const styles = StyleSheet.create({
     ...theme.shadows.lg,
   },
   centerButtonText: {
-    fontSize: 32,
+    fontSize: 40,
     color: theme.colors.white,
-    lineHeight: 32,
+    lineHeight: 40,
+    fontWeight: "300",
   },
 });
 

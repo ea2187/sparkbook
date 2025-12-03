@@ -9,6 +9,10 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp, NavigationProp } from "@react-navigation/native";
@@ -23,7 +27,8 @@ import DraggableSpark from "../components/DraggableSpark";
 import NoteComposerModal from '../components/NoteComposerModal';
 import { createNoteSpark } from '../lib/createNoteSpark';
 import QuickAddMenu from '../components/QuickAddMenu';
-import AudioRecorderModal from '../components/AudioRecorderModal'; 
+import AudioRecorderModal from '../components/AudioRecorderModal';
+import MoreMenu from '../components/MoreMenu'; 
 
 
 // ROUTE TYPES
@@ -49,6 +54,15 @@ const BoardScreen: FC = () => {
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [noteModalVisible, setNoteModalVisible] = useState(false);
   const [audioModalVisible, setAudioModalVisible] = useState(false);
+  const [moreMenuVisible, setMoreMenuVisible] = useState(false);
+  const [gridVisible, setGridVisible] = useState(true);
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [newBoardName, setNewBoardName] = useState("");
+  
+  // Undo/Redo state
+  const [history, setHistory] = useState<any[][]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyRef = useRef({ history: [] as any[][], index: -1 });
 
 
   const scrollViewRef = useRef<ScrollView>(null);
@@ -116,6 +130,56 @@ const BoardScreen: FC = () => {
 
     if (!error && data) {
       setSparks(data);
+      // Initialize history with current state only if history is empty
+      if (historyRef.current.history.length === 0) {
+        addToHistory(data);
+      }
+    }
+  }
+
+  // Add current state to history
+  function addToHistory(currentSparks: any[]) {
+    const newHistory = [...historyRef.current.history.slice(0, historyRef.current.index + 1)];
+    newHistory.push(JSON.parse(JSON.stringify(currentSparks))); // Deep copy
+    historyRef.current.history = newHistory;
+    historyRef.current.index = newHistory.length - 1;
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  }
+
+  // Undo
+  function handleUndo() {
+    if (historyRef.current.index > 0) {
+      historyRef.current.index--;
+      const previousState = historyRef.current.history[historyRef.current.index];
+      setSparks(JSON.parse(JSON.stringify(previousState))); // Deep copy
+      setHistoryIndex(historyRef.current.index);
+      
+      // Update database with previous state
+      previousState.forEach((spark: any) => {
+        supabase
+          .from("sparks")
+          .update({ x: spark.x, y: spark.y, width: spark.width, height: spark.height })
+          .eq("id", spark.id);
+      });
+    }
+  }
+
+  // Redo
+  function handleRedo() {
+    if (historyRef.current.index < historyRef.current.history.length - 1) {
+      historyRef.current.index++;
+      const nextState = historyRef.current.history[historyRef.current.index];
+      setSparks(JSON.parse(JSON.stringify(nextState))); // Deep copy
+      setHistoryIndex(historyRef.current.index);
+      
+      // Update database with next state
+      nextState.forEach((spark: any) => {
+        supabase
+          .from("sparks")
+          .update({ x: spark.x, y: spark.y, width: spark.width, height: spark.height })
+          .eq("id", spark.id);
+      });
     }
   }
 
@@ -130,9 +194,12 @@ const BoardScreen: FC = () => {
   // Update spark position in database
   function handleSparkMove(id: string, newX: number, newY: number) {
     // Update UI immediately
-    setSparks((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, x: newX, y: newY } : s))
-    );
+    setSparks((prev) => {
+      const updated = prev.map((s) => (s.id === id ? { ...s, x: newX, y: newY } : s));
+      // Add to history after move completes
+      setTimeout(() => addToHistory(updated), 100);
+      return updated;
+    });
 
     // Update database in background
     supabase
@@ -157,8 +224,15 @@ const BoardScreen: FC = () => {
   }
 
   async function handleDeleteSpark(id: string) {
+    // Save state before deletion
+    const currentState = [...sparks];
+    
     // Remove from UI
-    setSparks(prev => prev.filter(s => s.id !== id));
+    setSparks(prev => {
+      const updated = prev.filter(s => s.id !== id);
+      addToHistory(updated);
+      return updated;
+    });
 
     // Delete from database
     const { error } = await supabase.from("sparks").delete().eq("id", id);
@@ -174,9 +248,12 @@ const BoardScreen: FC = () => {
   // Handle resize
   async function handleSparkResize(id: string, newWidth: number, newHeight: number) {
     // Update UI
-    setSparks((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, width: newWidth, height: newHeight } : s))
-    );
+    setSparks((prev) => {
+      const updated = prev.map((s) => (s.id === id ? { ...s, width: newWidth, height: newHeight } : s));
+      // Add to history after resize completes
+      setTimeout(() => addToHistory(updated), 100);
+      return updated;
+    });
 
     // Update database
     const { error } = await supabase
@@ -187,6 +264,51 @@ const BoardScreen: FC = () => {
     if (error) {
       console.error("Failed to update spark size:", error);
     }
+  }
+
+  // Handle import file
+  function handleImportFile() {
+    navigation.navigate('ImportFile', { boardId });
+  }
+
+  // Handle toggle grid
+  function handleToggleGrid() {
+    setGridVisible(!gridVisible);
+  }
+
+  // Handle export as image
+  function handleExportAsImage() {
+    Alert.alert(
+      "Export as Image",
+      "This feature will export your board as an image. Coming soon!",
+      [{ text: "OK" }]
+    );
+  }
+
+  // Handle rename board
+  function handleRenameBoard() {
+    setNewBoardName(boardName);
+    setRenameModalVisible(true);
+  }
+
+  async function handleRenameSubmit() {
+    if (!newBoardName || !newBoardName.trim()) {
+      Alert.alert("Error", "Please enter a name");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("boards")
+      .update({ name: newBoardName.trim() })
+      .eq("id", boardId);
+
+    if (error) {
+      Alert.alert("Error", "Failed to rename board");
+      return;
+    }
+
+    setBoardName(newBoardName.trim());
+    setRenameModalVisible(false);
   }
 
   // ---- IMAGE PICKING & UPLOAD ----
@@ -260,7 +382,11 @@ const BoardScreen: FC = () => {
     const spark = await createSpark(boardId, url, spawnX, spawnY);
     if (!spark) return;
 
-    setSparks((prev) => [...prev, spark]);
+    setSparks((prev) => {
+      const updated = [...prev, spark];
+      addToHistory(updated);
+      return updated;
+    });
   }
 
   return (
@@ -274,15 +400,6 @@ const BoardScreen: FC = () => {
           >
             <Ionicons name="arrow-back" size={26} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          {/* UNDO/REDO BUTTONS */}
-          <View style={styles.undoRedoContainer}>
-            <TouchableOpacity style={styles.undoRedoButton}>
-              <Ionicons name="arrow-undo" size={22} color={theme.colors.textPrimary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.undoRedoButton}>
-              <Ionicons name="arrow-redo" size={22} color={theme.colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
         </View>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{boardName}</Text>
@@ -290,14 +407,39 @@ const BoardScreen: FC = () => {
             <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
           )}
         </View>
-        <View style={{ width: 40 }} />
-      </View>
-
-      {/* ORGANIZE BUTTON */}
-      <View style={styles.organizeContainer}>
-        <TouchableOpacity style={styles.organizeButton}>
-          <Ionicons name="sparkles" size={22} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.rightHeaderContainer}>
+          {/* UNDO/REDO BUTTONS */}
+          <View style={styles.undoRedoContainer}>
+            <TouchableOpacity 
+              style={[styles.undoRedoButton, historyIndex <= 0 && styles.undoRedoButtonDisabled]}
+              onPress={handleUndo}
+              disabled={historyIndex <= 0}
+            >
+              <Ionicons 
+                name="arrow-undo" 
+                size={20} 
+                color={historyIndex <= 0 ? theme.colors.textLight : theme.colors.textPrimary} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.undoRedoButton, historyIndex >= history.length - 1 && styles.undoRedoButtonDisabled]}
+              onPress={handleRedo}
+              disabled={historyIndex >= history.length - 1}
+            >
+              <Ionicons 
+                name="arrow-redo" 
+                size={20} 
+                color={historyIndex >= history.length - 1 ? theme.colors.textLight : theme.colors.textPrimary} 
+              />
+            </TouchableOpacity>
+          </View>
+          {/* ORGANIZE BUTTON */}
+          <View style={styles.organizeContainer}>
+            <TouchableOpacity style={styles.organizeButton}>
+              <Ionicons name="sparkles" size={22} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <View style={{ height: 100 }} />
@@ -320,24 +462,26 @@ const BoardScreen: FC = () => {
         showsVerticalScrollIndicator={false}
       >
         {/* GRID */}
-        <View style={styles.gridContainer}>
-          {Array.from({
-            length: Math.ceil(BOARD_HEIGHT / GRID_SIZE),
-          }).map((_, i) => (
-            <View
-              key={`h-${i}`}
-              style={[styles.gridLine, styles.gridLineHorizontal, { top: i * GRID_SIZE }]}
-            />
-          ))}
-          {Array.from({
-            length: Math.ceil(BOARD_WIDTH / GRID_SIZE),
-          }).map((_, i) => (
-            <View
-              key={`v-${i}`}
-              style={[styles.gridLine, styles.gridLineVertical, { left: i * GRID_SIZE }]}
-            />
-          ))}
-        </View>
+        {gridVisible && (
+          <View style={styles.gridContainer}>
+            {Array.from({
+              length: Math.ceil(BOARD_HEIGHT / GRID_SIZE),
+            }).map((_, i) => (
+              <View
+                key={`h-${i}`}
+                style={[styles.gridLine, styles.gridLineHorizontal, { top: i * GRID_SIZE }]}
+              />
+            ))}
+            {Array.from({
+              length: Math.ceil(BOARD_WIDTH / GRID_SIZE),
+            }).map((_, i) => (
+              <View
+                key={`v-${i}`}
+                style={[styles.gridLine, styles.gridLineVertical, { left: i * GRID_SIZE }]}
+              />
+            ))}
+          </View>
+        )}
 
         {/* SPARKS */}
         <View style={styles.canvasContent}>
@@ -377,25 +521,30 @@ const BoardScreen: FC = () => {
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.bottomBarIcon} onPress ={() => setNoteModalVisible(true)}>
           <Image source={require("../assets/note.png")} style={styles.bottomBarIconImage} />
+          <Text style={styles.bottomBarLabel}>Note</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.bottomBarIcon} onPress={() => setAudioModalVisible(true)}>
           <Image source={require("../assets/voice.png")} style={styles.bottomBarIconImage} />
+          <Text style={styles.bottomBarLabel}>Audio</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
           style={styles.bottomBarIcon} 
           onPress={() => navigation.navigate('AddMusic', { boardId })}
         >
-          <Ionicons name="musical-notes" size={32} color={theme.colors.primary} />
+          <Ionicons name="musical-notes" size={32} color={theme.colors.primary} style={{ marginBottom: 6 }} />
+          <Text style={styles.bottomBarLabel}>Music</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.bottomBarIcon} onPress={handlePhotoButton}>
           <Image source={require("../assets/photo.png")} style={styles.bottomBarIconImage} />
+          <Text style={styles.bottomBarLabel}>Photo</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomBarIcon}>
-          <Ionicons name="ellipsis-horizontal" size={32} color={theme.colors.light} />
+        <TouchableOpacity style={styles.bottomBarIcon} onPress={() => setMoreMenuVisible(true)}>
+          <Ionicons name="ellipsis-horizontal" size={32} color={theme.colors.textPrimary} style={{ marginBottom: 6 }} />
+          <Text style={styles.bottomBarLabel}>More</Text>
         </TouchableOpacity>
       </View>
 
@@ -409,7 +558,11 @@ const BoardScreen: FC = () => {
 
     const spark = await createNoteSpark(boardId, title, text, spawnX, spawnY);
     if (spark) {
-      setSparks(prev => [...prev, spark]);
+      setSparks(prev => {
+        const updated = [...prev, spark];
+        addToHistory(updated);
+        return updated;
+      });
     }
     setNoteModalVisible(false);
   }}
@@ -420,10 +573,71 @@ const BoardScreen: FC = () => {
         onClose={() => setAudioModalVisible(false)}
         boardId={boardId}
         onAudioCreated={(spark: any) => {
-          setSparks(prev => [...prev, spark]);
+          setSparks(prev => {
+            const updated = [...prev, spark];
+            addToHistory(updated);
+            return updated;
+          });
           setAudioModalVisible(false);
         }}
       />
+
+      <MoreMenu
+        visible={moreMenuVisible}
+        onClose={() => setMoreMenuVisible(false)}
+        onImportFile={handleImportFile}
+        onToggleGrid={handleToggleGrid}
+        onExportAsImage={handleExportAsImage}
+        onRenameBoard={handleRenameBoard}
+        gridVisible={gridVisible}
+      />
+
+      {/* Rename Board Modal */}
+      <Modal
+        visible={renameModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setRenameModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.renameModalOverlay}>
+            <TouchableOpacity
+              style={styles.renameModalBackdrop}
+              activeOpacity={1}
+              onPress={() => setRenameModalVisible(false)}
+            />
+            <View style={styles.renameModalContent}>
+              <Text style={styles.renameModalTitle}>Rename Board</Text>
+              <TextInput
+                style={styles.renameModalInput}
+                value={newBoardName}
+                onChangeText={setNewBoardName}
+                placeholder="Enter board name"
+                placeholderTextColor={theme.colors.textLight}
+                autoFocus
+                onSubmitEditing={handleRenameSubmit}
+              />
+              <View style={styles.renameModalButtons}>
+                <TouchableOpacity
+                  style={[styles.renameModalButton, styles.renameModalButtonCancel]}
+                  onPress={() => setRenameModalVisible(false)}
+                >
+                  <Text style={styles.renameModalButtonCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.renameModalButton, styles.renameModalButtonSave]}
+                  onPress={handleRenameSubmit}
+                >
+                  <Text style={styles.renameModalButtonSaveText}>Rename</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
     </View>
   );
@@ -434,10 +648,10 @@ const styles = StyleSheet.create({
   header: {
   flexDirection: "row",
   alignItems: "center",
-  paddingTop: 50,
+  paddingTop: 60,
   paddingHorizontal: 20,
-  height: 100,
-  backgroundColor: theme.colors.light,
+  height: 110,
+  backgroundColor: theme.colors.white,
   zIndex: 10000,
   elevation: 12,
   position: "absolute",
@@ -448,9 +662,15 @@ const styles = StyleSheet.create({
 
   leftHeaderContainer: {
     position: "absolute",
-    top: 55,
+    top: 65,
     left: 20,
-    flexDirection: "column",
+    zIndex: 10001,
+  },
+  rightHeaderContainer: {
+    position: "absolute",
+    top: 65,
+    right: 20,
+    flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
     zIndex: 10001,
@@ -460,7 +680,7 @@ const styles = StyleSheet.create({
   },
   headerCenter: {
     position: "absolute",
-    top: 55,
+    top: 65,
     left: 0,
     right: 0,
     flexDirection: "row",
@@ -502,23 +722,24 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   undoRedoContainer: {
-    flexDirection: "column",
-    gap: 8,
+    flexDirection: "row",
+    gap: 6,
     zIndex: 10001,
+    alignItems: "center",
   },
   undoRedoButton: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     backgroundColor: theme.colors.white,
-    borderRadius: 20,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
     ...theme.shadows.md,
   },
+  undoRedoButtonDisabled: {
+    opacity: 0.4,
+  },
   organizeContainer: {
-    position: "absolute",
-    top: 55,
-    right: 20,
     zIndex: 10001,
   },
   organizeButton: {
@@ -533,7 +754,7 @@ const styles = StyleSheet.create({
   bottomBar: {
     position: "absolute",
     bottom: 0,
-    height: 90,
+    height: 100,
     width: "100%",
     backgroundColor: "#fff",
     flexDirection: "row",
@@ -542,13 +763,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     elevation: 5,
-  
+    paddingBottom: 8,
   },
   bottomBarIcon: {
-    width: 44,
-    height: 44,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
     overflow: "visible",
     padding: 4,
   },
@@ -556,6 +775,14 @@ const styles = StyleSheet.create({
     width: 36, 
     height: 36,
     resizeMode: "contain",
+    marginBottom: 6,
+  },
+  bottomBarLabel: {
+    fontSize: 11,
+    color: theme.colors.textPrimary,
+    marginTop: 4,
+    fontFamily: theme.typography.fontFamily.medium,
+    letterSpacing: 0.2,
   },
   uploadingOverlay: {
     position: "absolute",
@@ -580,6 +807,66 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.textPrimary,
+  },
+  renameModalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  renameModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  renameModalContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 20,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    ...theme.shadows.lg,
+  },
+  renameModalTitle: {
+    fontSize: 20,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+    marginBottom: 16,
+  },
+  renameModalInput: {
+    backgroundColor: theme.colors.light,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    marginBottom: 20,
+  },
+  renameModalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  renameModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  renameModalButtonCancel: {
+    backgroundColor: theme.colors.light,
+  },
+  renameModalButtonCancelText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+  },
+  renameModalButtonSave: {
+    backgroundColor: theme.colors.primary,
+  },
+  renameModalButtonSaveText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.white,
   },
 });
 
