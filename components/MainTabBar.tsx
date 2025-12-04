@@ -1,6 +1,8 @@
 import React, { FC, useState } from "react";
 import { View, StyleSheet, TouchableOpacity, Image, Text, Alert } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { getFocusedRouteNameFromRoute, CommonActions } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import theme from "../styles/theme";
 import QuickAddMenu from "./QuickAddMenu";
@@ -11,6 +13,7 @@ const MainTabBar: FC<BottomTabBarProps> = ({
   navigation,
 }) => {
   const focusedRoute = state.routes[state.index];
+  const focusedRouteName = getFocusedRouteNameFromRoute(focusedRoute) ?? focusedRoute.name;
   const [menuVisible, setMenuVisible] = useState(false);
 
   const handlePress = (routeName: string) => {
@@ -55,7 +58,7 @@ const MainTabBar: FC<BottomTabBarProps> = ({
         >
           <Image
             source={
-              focusedRoute.name === "Home"
+              focusedRouteName === "HomeMain" || focusedRouteName === "Home"
                 ? require("../assets/selected home.png")
                 : require("../assets/home.png")
             }
@@ -66,7 +69,7 @@ const MainTabBar: FC<BottomTabBarProps> = ({
             numberOfLines={1}
             style={[
               styles.label,
-              focusedRoute.name === "Home" && styles.labelActive,
+              (focusedRouteName === "HomeMain" || focusedRouteName === "Home") && styles.labelActive,
             ]}
           >
             Home
@@ -82,7 +85,7 @@ const MainTabBar: FC<BottomTabBarProps> = ({
         >
           <Image
             source={
-              focusedRoute.name === "Social"
+              focusedRouteName === "Social"
                 ? require("../assets/selected community.png")
                 : require("../assets/community.png")
             }
@@ -93,7 +96,7 @@ const MainTabBar: FC<BottomTabBarProps> = ({
             numberOfLines={1}
             style={[
               styles.label,
-              focusedRoute.name === "Social" && styles.labelActive,
+              focusedRouteName === "Social" && styles.labelActive,
             ]}
           >
             Community

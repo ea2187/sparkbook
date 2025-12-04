@@ -10,6 +10,8 @@ import AddMusicDetailsScreen from '../screens/AddMusicDetailsScreen';
 import PhotoPickerScreen from '../screens/PhotoPickerScreen';
 import AddPhotoDetailsScreen from '../screens/AddPhotoDetailsScreen';
 import SparkDetailsScreen from '../screens/SparkDetailsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 import type { HomeStackParamList } from '../types';
 
 const Stack = createStackNavigator<HomeStackParamList>();
@@ -37,6 +39,7 @@ const HomeStackNavigator: FC = () => {
         options={{
           title: 'Home',
           headerShown: false,
+          ...TransitionPresets.SlideFromLeftIOS,
         }}
       />
       <Stack.Screen
@@ -99,6 +102,21 @@ const HomeStackNavigator: FC = () => {
       <Stack.Screen
         name="SparkDetails"
         component={SparkDetailsScreen}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          headerShown: false,
+          ...TransitionPresets.SlideFromRightIOS,
+        }}
+      />
+      <Stack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
         options={{
           headerShown: false,
         }}

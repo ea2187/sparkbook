@@ -37,7 +37,7 @@ const App: FC = () => {
     }
   }, [fontsLoaded]);
 
-  // Check if user is already logged in
+  // Check if user is already logged in and listen for auth state changes
   useEffect(() => {
     const checkAuth = async () => {
       const { data } = await supabase.auth.getSession();
@@ -46,6 +46,16 @@ const App: FC = () => {
       console.log('Current logged user:', data.session?.user);
     };
     checkAuth();
+
+    // Listen for auth state changes (login/logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, session?.user?.id);
+      setIsAuthenticated(!!session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleLoginSuccess = () => {
@@ -68,8 +78,8 @@ const App: FC = () => {
     const route = props.state.routes[props.state.index];
     const routeName = getFocusedRouteNameFromRoute(route) ?? "HomeMain";
     
-    // Hide tab bar on Board, PhotoPicker, AddPhotoDetails, SparkDetails, and ImportFile screens
-    if (routeName === "Board" || routeName === "PhotoPicker" || routeName === "AddPhotoDetails" || routeName === "SparkDetails" || routeName === "ImportFile") {
+    // Hide tab bar on Board, PhotoPicker, AddPhotoDetails, SparkDetails, ImportFile, Profile, and EditProfile screens
+    if (routeName === "Board" || routeName === "PhotoPicker" || routeName === "AddPhotoDetails" || routeName === "SparkDetails" || routeName === "ImportFile" || routeName === "Profile" || routeName === "EditProfile") {
       return null;
     }
     

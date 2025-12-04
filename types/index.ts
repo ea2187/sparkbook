@@ -2,6 +2,7 @@
 export type RootTabParamList = {
   Home: undefined;
   Social: undefined;
+  Profile: undefined;
 };
 
 export type HomeStackParamList = {
@@ -15,6 +16,8 @@ export type HomeStackParamList = {
   PhotoPicker: undefined;
   AddPhotoDetails: { imageUri: string };
   SparkDetails: { sparkId: string; boardId: string };
+  Profile: undefined;
+  EditProfile: undefined;
 };
 
 // Board Types

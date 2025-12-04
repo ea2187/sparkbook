@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
@@ -38,6 +39,10 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
   const [loading, setLoading] = useState(false);
   const [isShared, setIsShared] = useState(false);
   const [sharedPostId, setSharedPostId] = useState<string | null>(null);
+  const [showCaptionModal, setShowCaptionModal] = useState(false);
+  const [caption, setCaption] = useState("");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   // Check if board is shared when menu opens
   useEffect(() => {
@@ -166,7 +171,13 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
     }
   }
 
-  async function handleShare() {
+  function handleSharePress() {
+    // Close main menu and show caption modal
+    onClose();
+    setShowCaptionModal(true);
+  }
+
+  async function handleShare(captionText: string | null = null) {
     setLoading(true);
     
     try {
@@ -178,11 +189,12 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
         return;
       }
 
-      // Fetch all sparks from the board
+      // Fetch all sparks from the board with all necessary fields
       const { data: sparks, error: sparksError } = await supabase
         .from("sparks")
-        .select("id, content_url, type")
-        .eq("board_id", boardId);
+        .select("id, content_url, type, title, text_content")
+        .eq("board_id", boardId)
+        .order("created_at", { ascending: true });
 
       if (sparksError) {
         console.error("Error fetching sparks:", sparksError);
@@ -203,7 +215,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
         .insert({
           user_id: userData.user.id,
           type: "sparklette",
-          caption: null,
+          caption: captionText || null,
         })
         .select()
         .single();
@@ -216,15 +228,85 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
       }
 
       // Create attachments for each spark
-      const attachments = sparks.map((spark) => ({
-        post_id: post.id,
-        spark_id: spark.id,
-        title: boardName,
-        subtitle: null,
-        image_url: spark.content_url,
-        spotify_url: null,
-        media_type: "spark" as const,
-      }));
+      const attachments = sparks.map((spark) => {
+        // Determine media type based on spark type
+        // Music sparks are type "audio" but have albumImage, so we'll mark them as "music"
+        // Regular audio sparks are type "audio" without albumImage, we'll mark them as "spark"
+        let mediaType: "image" | "music" | "spark" | "note" = "spark";
+        if (spark.type === "image") {
+          mediaType = "image";
+        } else if (spark.type === "note") {
+          mediaType = "note";
+        } else if (spark.type === "audio" || spark.type === "music") {
+          // Check if it's music (has albumImage) or just audio
+          let metadata = null;
+          if (spark.text_content) {
+            try {
+              metadata = JSON.parse(spark.text_content);
+            } catch (e) {
+              // text_content might not be JSON
+            }
+          }
+          const hasAlbumImage = metadata?.albumImage || metadata?.album_image;
+          mediaType = hasAlbumImage ? "music" : "spark";
+        }
+        
+        // Get title from spark data (subtitle might be in text_content)
+        const sparkTitle = spark.title || boardName;
+        let sparkSubtitle: string | null = null;
+        
+        // Try to get subtitle from text_content
+        if (spark.text_content) {
+          try {
+            const metadata = JSON.parse(spark.text_content);
+            sparkSubtitle = metadata?.subtitle || metadata?.artist || metadata?.artists || null;
+          } catch (e) {
+            // text_content might not be JSON
+          }
+        }
+        
+        // For image sparks, use content_url as image_url
+        // For music sparks (type "audio" with albumImage in metadata), get album image
+        let imageUrl: string | null = null;
+        if (spark.type === "image") {
+          imageUrl = spark.content_url;
+        } else if (spark.type === "audio" || spark.type === "music") {
+          // Try to extract album image from text_content
+          let metadata = null;
+          if (spark.text_content) {
+            try {
+              metadata = JSON.parse(spark.text_content);
+            } catch (e) {
+              // text_content might not be JSON
+            }
+          }
+          imageUrl = metadata?.albumImage || metadata?.album_image || null;
+        }
+        
+        // For music, get spotify_url from text_content metadata
+        let spotifyUrl: string | null = null;
+        if (spark.type === "audio" || spark.type === "music") {
+          let metadata = null;
+          if (spark.text_content) {
+            try {
+              metadata = JSON.parse(spark.text_content);
+            } catch (e) {
+              // text_content might not be JSON
+            }
+          }
+          spotifyUrl = metadata?.spotifyUrl || metadata?.spotify_url || spark.content_url || null;
+        }
+        
+        return {
+          post_id: post.id,
+          spark_id: spark.id,
+          title: sparkTitle,
+          subtitle: sparkSubtitle,
+          image_url: imageUrl,
+          spotify_url: spotifyUrl,
+          media_type: mediaType,
+        };
+      });
 
       const { error: attachmentsError } = await supabase
         .from("community_attachments")
@@ -241,11 +323,21 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
 
       setIsShared(true);
       setSharedPostId(post.id);
-      Alert.alert("Success", "Sparklette shared to community!");
+      setShowCaptionModal(false);
+      setCaption("");
+      setSuccessMessage("Sparklette shared to community!");
+      setShowSuccessModal(true);
       onClose();
+      
+      // Auto-hide success modal after 2 seconds
+      setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 2000);
     } catch (error) {
       console.error("Error sharing:", error);
       Alert.alert("Error", "Failed to share Sparklette");
+      setShowCaptionModal(false);
+      setCaption("");
     } finally {
       setLoading(false);
     }
@@ -283,8 +375,14 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
               } else {
                 setIsShared(false);
                 setSharedPostId(null);
-                Alert.alert("Success", "Sparklette unshared from community!");
+                setSuccessMessage("Sparklette unshared from community!");
+                setShowSuccessModal(true);
                 onClose();
+                
+                // Auto-hide success modal after 2 seconds
+                setTimeout(() => {
+                  setShowSuccessModal(false);
+                }, 2000);
               }
             } catch (error) {
               console.error("Error unsharing:", error);
@@ -299,6 +397,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
   }
 
   return (
+    <>
     <Modal
       animationType="slide"
       transparent={true}
@@ -376,7 +475,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
                 ) : (
                   <TouchableOpacity
                     style={styles.menuItem}
-                    onPress={handleShare}
+                    onPress={handleSharePress}
                     disabled={loading}
                   >
                     <Ionicons name="share-outline" size={24} color={theme.colors.primary} />
@@ -401,6 +500,91 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
       </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </Modal>
+
+    {/* Caption Modal */}
+    <Modal
+      visible={showCaptionModal}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => {
+        setShowCaptionModal(false);
+        setCaption("");
+      }}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <TouchableWithoutFeedback onPress={() => {
+          setShowCaptionModal(false);
+          setCaption("");
+        }}>
+          <View style={styles.captionModalOverlay}>
+            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+              <View style={styles.captionModalContent}>
+                <Text style={styles.captionModalTitle}>Add a Caption</Text>
+                <Text style={styles.captionModalSubtitle}>Optional</Text>
+                <TextInput
+                  style={styles.captionInput}
+                  placeholder="What's this Sparklette about?"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={caption}
+                  onChangeText={setCaption}
+                  multiline
+                  maxLength={500}
+                  autoFocus
+                />
+                <View style={styles.captionModalButtons}>
+                  <TouchableOpacity
+                    style={[styles.captionButton, styles.captionButtonCancel]}
+                    onPress={() => {
+                      setShowCaptionModal(false);
+                      setCaption("");
+                    }}
+                    disabled={loading}
+                  >
+                    <Text style={[styles.captionButtonText, { color: theme.colors.textSecondary }]}>
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.captionButton, styles.captionButtonShare]}
+                    onPress={() => handleShare(caption.trim() || null)}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator size="small" color={theme.colors.white} />
+                    ) : (
+                      <Text style={[styles.captionButtonText, { color: theme.colors.white }]}>
+                        Share
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </Modal>
+
+    {/* Success Modal */}
+    <Modal
+      visible={showSuccessModal}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setShowSuccessModal(false)}
+    >
+      <TouchableWithoutFeedback onPress={() => setShowSuccessModal(false)}>
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalContent}>
+            <Ionicons name="checkmark-circle" size={48} color={theme.colors.primary} />
+            <Text style={styles.successModalText}>{successMessage}</Text>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+    </>
   );
 };
 
@@ -492,6 +676,86 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.white,
+  },
+  captionModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  captionModalContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.borderRadius.xl,
+    padding: theme.spacing.xl,
+    width: "85%",
+    maxWidth: 400,
+    ...theme.shadows.lg,
+  },
+  captionModalTitle: {
+    fontSize: theme.typography.fontSize.xl,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.xs,
+  },
+  captionModalSubtitle: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.md,
+  },
+  captionInput: {
+    backgroundColor: theme.colors.light,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+    minHeight: 100,
+    textAlignVertical: "top",
+    marginBottom: theme.spacing.lg,
+  },
+  captionModalButtons: {
+    flexDirection: "row",
+    gap: theme.spacing.md,
+  },
+  captionButton: {
+    flex: 1,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  captionButtonCancel: {
+    backgroundColor: theme.colors.light,
+  },
+  captionButtonShare: {
+    backgroundColor: theme.colors.primary,
+  },
+  captionButtonText: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.semiBold,
+  },
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  successModalContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.borderRadius.xl,
+    padding: theme.spacing.xl,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 200,
+    ...theme.shadows.lg,
+  },
+  successModalText: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.textPrimary,
+    textAlign: "center",
+    marginTop: theme.spacing.md,
   },
 });
 

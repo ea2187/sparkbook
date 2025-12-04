@@ -9,6 +9,7 @@ import {
   Linking,
   TouchableOpacity,
   GestureResponderEvent,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -78,6 +79,13 @@ export default function DraggableSpark({
       setSize({ width: spark.width, height: spark.height });
     }
   }, [spark.width, spark.height]);
+
+  // Reset crop mode when spark is deselected
+  useEffect(() => {
+    if (!selected) {
+      setCropMode(false);
+    }
+  }, [selected]);
 
   // Check if spark is newly created (within last 3 seconds)
   useEffect(() => {
@@ -514,14 +522,34 @@ export default function DraggableSpark({
               }
             ]}
           >
-            <Image
-              source={{ uri: spark.content_url }}
-              style={[
-                styles.image,
-                { width: size.width, height: size.height },
-                selected && styles.selected,
-              ]}
-            />
+            <View>
+              <Image
+                source={{ uri: spark.content_url }}
+                style={[
+                  styles.image,
+                  { width: size.width, height: size.height },
+                  selected && styles.selected,
+                ]}
+              />
+              {/* Show attribution if this is a saved image from community */}
+              {spark.text_content && spark.text_content.startsWith('{') && (() => {
+                try {
+                  const metadata = JSON.parse(spark.text_content);
+                  if (metadata.is_saved_from_community && metadata.original_creator_name) {
+                    return (
+                      <View style={styles.imageAttribution}>
+                        <Text style={styles.imageAttributionText}>
+                          Photo by {metadata.original_creator_name}
+                        </Text>
+                      </View>
+                    );
+                  }
+                } catch (e) {
+                  // Not JSON metadata
+                }
+                return null;
+              })()}
+            </View>
           </Animated.View>
           {selected && (
             <>
@@ -533,15 +561,15 @@ export default function DraggableSpark({
                   activeOpacity={0.7}
                 >
                   <Ionicons
-                    name="expand-outline"
+                    name="resize"
                     size={20}
-                    color="#3A7AFE"
+                    color={theme.colors.primary}
                   />
                 </TouchableOpacity>
               )}
 
-              {/* Delete button */}
-              {onDelete && (
+              {/* Delete button - hide when in crop mode */}
+              {onDelete && !cropMode && (
                 <TouchableOpacity
                   style={[styles.deleteButton, { top: -8, right: -8 }]}
                   onPress={(e) => {
@@ -561,25 +589,25 @@ export default function DraggableSpark({
                     {...resizeHandles['top-left'].current.panHandlers}
                     style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
                   >
-                    <View style={styles.resizeHandleInner} />
+                    <Ionicons name="resize" size={12} color={theme.colors.white} />
                   </View>
                   <View
                     {...resizeHandles['top-right'].current.panHandlers}
                     style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
                   >
-                    <View style={styles.resizeHandleInner} />
+                    <Ionicons name="resize" size={12} color={theme.colors.white} />
                   </View>
                   <View
                     {...resizeHandles['bottom-left'].current.panHandlers}
                     style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
                   >
-                    <View style={styles.resizeHandleInner} />
+                    <Ionicons name="resize" size={12} color={theme.colors.white} />
                   </View>
                   <View
                     {...resizeHandles['bottom-right'].current.panHandlers}
                     style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
                   >
-                    <View style={styles.resizeHandleInner} />
+                    <Ionicons name="resize" size={12} color={theme.colors.white} />
                   </View>
                 </>
               )}
@@ -624,6 +652,78 @@ export default function DraggableSpark({
       )}
 
       {isNote && (() => {
+        // Check if this is a saved sparklette
+        let isSavedSparklette = false;
+        let sparkletteData: any = null;
+        
+        if (spark.text_content && spark.text_content.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(spark.text_content);
+            if (parsed.isSavedSparklette) {
+              isSavedSparklette = true;
+              sparkletteData = parsed;
+            }
+          } catch (e) {
+            // Not JSON, treat as regular note
+          }
+        }
+
+        // Render saved sparklette as preview
+        if (isSavedSparklette && sparkletteData) {
+          return (
+            <View style={{ position: 'relative' }}>
+              <View
+                style={[
+                  styles.sparklettePreviewCard,
+                  { width: size.width, height: size.height },
+                  selected && styles.selectedNote,
+                ]}
+              >
+                <Text style={styles.sparklettePreviewTitle} numberOfLines={1}>
+                  {spark.title || 'Saved Sparklette'}
+                </Text>
+                {sparkletteData.caption && (
+                  <Text style={styles.sparklettePreviewCaption} numberOfLines={1}>
+                    {sparkletteData.caption}
+                  </Text>
+                )}
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false} 
+                  style={styles.sparklettePreviewScroll}
+                  contentContainerStyle={styles.sparklettePreviewContent}
+                >
+                  {(sparkletteData.attachments || []).slice(0, 4).map((attachment: any, idx: number) => {
+                    if (attachment.image_url && (attachment.media_type === "image" || attachment.media_type === "music")) {
+                      return (
+                        <Image 
+                          key={idx} 
+                          source={{ uri: attachment.image_url }} 
+                          style={styles.sparklettePreviewTile} 
+                        />
+                      );
+                    }
+                    let iconName: "sparkles" | "document-text" | "musical-notes" | "image-outline" | "play-circle" = "sparkles";
+                    if (attachment.media_type === "note") iconName = "document-text";
+                    else if (attachment.media_type === "music") iconName = "musical-notes";
+                    else if (attachment.media_type === "image") iconName = "image-outline";
+                    else if (attachment.media_type === "spark") iconName = "play-circle";
+                    return (
+                      <View key={idx} style={styles.sparklettePreviewTilePlaceholder}>
+                        <Ionicons name={iconName} size={16} color={theme.colors.textLight} />
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+                <Text style={styles.sparklettePreviewAttribution}>
+                  by {sparkletteData.creator_name}
+                </Text>
+              </View>
+            </View>
+          );
+        }
+
+        // Regular note rendering
         const maxLength = 120;
         const isTruncated = spark.text_content && spark.text_content.length > maxLength;
         const displayText = isTruncated 
@@ -635,6 +735,7 @@ export default function DraggableSpark({
             <View
               style={[
                 styles.noteCard,
+                { width: size.width, height: size.height },
                 selected && styles.selectedNote,
               ]}
             >
@@ -654,17 +755,67 @@ export default function DraggableSpark({
                 </>
               ) : null}
             </View>
-            {selected && onDelete && (
-              <TouchableOpacity
-                style={[styles.deleteButton, { top: -8, right: -8 }]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onDelete(spark.id);
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="trash" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
+            {selected && (
+              <>
+                {/* Resize toggle button - only show when not in crop mode */}
+                {!cropMode && (
+                  <TouchableOpacity
+                    style={[styles.cropButton, { bottom: -8, left: -8 }]}
+                    onPress={() => setCropMode(!cropMode)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="resize"
+                      size={20}
+                      color={theme.colors.primary}
+                    />
+                  </TouchableOpacity>
+                )}
+
+                {/* Delete button - hide when in crop mode */}
+                {onDelete && !cropMode && (
+                  <TouchableOpacity
+                    style={[styles.deleteButton, { top: -8, right: -8 }]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onDelete(spark.id);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="trash" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                )}
+
+                {/* Corner handles - only show in crop mode */}
+                {cropMode && (
+                  <>
+                    <View
+                      {...resizeHandles['top-left'].current.panHandlers}
+                      style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
+                    >
+                      <Ionicons name="resize" size={12} color={theme.colors.white} />
+                    </View>
+                    <View
+                      {...resizeHandles['top-right'].current.panHandlers}
+                      style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
+                    >
+                      <Ionicons name="resize" size={12} color={theme.colors.white} />
+                    </View>
+                    <View
+                      {...resizeHandles['bottom-left'].current.panHandlers}
+                      style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
+                    >
+                      <Ionicons name="resize" size={12} color={theme.colors.white} />
+                    </View>
+                    <View
+                      {...resizeHandles['bottom-right'].current.panHandlers}
+                      style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
+                    >
+                      <Ionicons name="resize" size={12} color={theme.colors.white} />
+                    </View>
+                  </>
+                )}
+              </>
             )}
           </View>
         );
@@ -714,33 +865,23 @@ export default function DraggableSpark({
               </View>
               {selected && (
                 <>
-                  {/* Resize handles */}
-                  <View
-                    {...resizeHandles['top-left'].current.panHandlers}
-                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
-                  >
-                    <View style={styles.resizeHandleInner} />
-                  </View>
-                  <View
-                    {...resizeHandles['top-right'].current.panHandlers}
-                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
-                  >
-                    <View style={styles.resizeHandleInner} />
-                  </View>
-                  <View
-                    {...resizeHandles['bottom-left'].current.panHandlers}
-                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
-                  >
-                    <View style={styles.resizeHandleInner} />
-                  </View>
-                  <View
-                    {...resizeHandles['bottom-right'].current.panHandlers}
-                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
-                  >
-                    <View style={styles.resizeHandleInner} />
-                  </View>
-                  {/* Delete button */}
-                  {onDelete && (
+                  {/* Resize toggle button - only show when not in crop mode */}
+                  {!cropMode && (
+                    <TouchableOpacity
+                      style={[styles.cropButton, { bottom: -8, left: -8 }]}
+                      onPress={() => setCropMode(!cropMode)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="resize"
+                        size={20}
+                        color={theme.colors.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Delete button - hide when in crop mode */}
+                  {onDelete && !cropMode && (
                     <TouchableOpacity
                       style={[styles.deleteButton, { top: -8, right: -8 }]}
                       onPress={(e) => {
@@ -751,6 +892,36 @@ export default function DraggableSpark({
                     >
                       <Ionicons name="trash" size={18} color="#FFFFFF" />
                     </TouchableOpacity>
+                  )}
+
+                  {/* Corner handles - only show in crop mode */}
+                  {cropMode && (
+                    <>
+                      <View
+                        {...resizeHandles['top-left'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                      <View
+                        {...resizeHandles['top-right'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                      <View
+                        {...resizeHandles['bottom-left'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                      <View
+                        {...resizeHandles['bottom-right'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                    </>
                   )}
                 </>
               )}
@@ -784,33 +955,23 @@ export default function DraggableSpark({
               </View>
               {selected && (
                 <>
-                  {/* Resize handles */}
-                  <View
-                    {...resizeHandles['top-left'].current.panHandlers}
-                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
-                  >
-                    <View style={styles.resizeHandleInner} />
-                  </View>
-                  <View
-                    {...resizeHandles['top-right'].current.panHandlers}
-                    style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
-                  >
-                    <View style={styles.resizeHandleInner} />
-                  </View>
-                  <View
-                    {...resizeHandles['bottom-left'].current.panHandlers}
-                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
-                  >
-                    <View style={styles.resizeHandleInner} />
-                  </View>
-                  <View
-                    {...resizeHandles['bottom-right'].current.panHandlers}
-                    style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
-                  >
-                    <View style={styles.resizeHandleInner} />
-                  </View>
-                  {/* Delete button */}
-                  {onDelete && (
+                  {/* Resize toggle button - only show when not in crop mode */}
+                  {!cropMode && (
+                    <TouchableOpacity
+                      style={[styles.cropButton, { bottom: -8, left: -8 }]}
+                      onPress={() => setCropMode(!cropMode)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="resize"
+                        size={20}
+                        color={theme.colors.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Delete button - hide when in crop mode */}
+                  {onDelete && !cropMode && (
                     <TouchableOpacity
                       style={[styles.deleteButton, { top: -8, right: -8 }]}
                       onPress={(e) => {
@@ -821,6 +982,36 @@ export default function DraggableSpark({
                     >
                       <Ionicons name="trash" size={18} color="#FFFFFF" />
                     </TouchableOpacity>
+                  )}
+
+                  {/* Corner handles - only show in crop mode */}
+                  {cropMode && (
+                    <>
+                      <View
+                        {...resizeHandles['top-left'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                      <View
+                        {...resizeHandles['top-right'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                      <View
+                        {...resizeHandles['bottom-left'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                      <View
+                        {...resizeHandles['bottom-right'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                    </>
                   )}
                 </>
               )}
@@ -847,17 +1038,67 @@ export default function DraggableSpark({
                   {spark.title || 'Audio'}
                 </Text>
               </View>
-              {selected && onDelete && (
-                <TouchableOpacity
-                  style={[styles.deleteButton, { top: -8, right: -8 }]}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    onDelete(spark.id);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="trash" size={18} color="#FFFFFF" />
-                </TouchableOpacity>
+              {selected && (
+                <>
+                  {/* Resize toggle button - only show when not in crop mode */}
+                  {!cropMode && (
+                    <TouchableOpacity
+                      style={[styles.cropButton, { bottom: -8, left: -8 }]}
+                      onPress={() => setCropMode(!cropMode)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="resize"
+                        size={20}
+                        color={theme.colors.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Delete button - hide when in crop mode */}
+                  {onDelete && !cropMode && (
+                    <TouchableOpacity
+                      style={[styles.deleteButton, { top: -8, right: -8 }]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        onDelete(spark.id);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash" size={18} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Corner handles - only show in crop mode */}
+                  {cropMode && (
+                    <>
+                      <View
+                        {...resizeHandles['top-left'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, left: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                      <View
+                        {...resizeHandles['top-right'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { top: -8, right: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                      <View
+                        {...resizeHandles['bottom-left'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, left: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                      <View
+                        {...resizeHandles['bottom-right'].current.panHandlers}
+                        style={[styles.resizeHandle, styles.resizeHandleCorner, { bottom: -8, right: -8 }]}
+                      >
+                        <Ionicons name="resize" size={12} color={theme.colors.white} />
+                      </View>
+                    </>
+                  )}
+                </>
               )}
             </View>
           );
@@ -879,8 +1120,6 @@ const styles = StyleSheet.create({
     borderColor: "#3A7AFE",
   },
   noteCard: {
-    width: 180,
-    minHeight: 120,
     borderRadius: 14,
     padding: 10,
     backgroundColor: "#FFFBEA",
@@ -903,6 +1142,66 @@ const styles = StyleSheet.create({
     color: "#A78BFA",
     fontStyle: "italic",
     marginTop: 6,
+  },
+  sparklettePreviewCard: {
+    borderRadius: 14,
+    padding: 10,
+    backgroundColor: "#FFFBEA",
+    borderWidth: 1,
+    borderColor: "#FACC15",
+  },
+  sparklettePreviewTitle: {
+    fontWeight: "600",
+    marginBottom: 4,
+    fontSize: 14,
+  },
+  sparklettePreviewCaption: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+  },
+  sparklettePreviewScroll: {
+    flex: 1,
+    marginBottom: 6,
+  },
+  sparklettePreviewContent: {
+    gap: 6,
+  },
+  sparklettePreviewTile: {
+    width: 50,
+    height: 50,
+    borderRadius: 6,
+  },
+  sparklettePreviewTilePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 6,
+    backgroundColor: theme.colors.light,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sparklettePreviewAttribution: {
+    fontSize: 9,
+    color: theme.colors.textSecondary,
+    fontStyle: "italic",
+    textAlign: "right",
+  },
+  imageAttribution: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+  },
+  imageAttributionText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   audioCard: {
     borderRadius: 14,
@@ -1027,7 +1326,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#3A7AFE",
+    backgroundColor: theme.colors.primary,
     borderWidth: 2,
     borderColor: "#FFFFFF",
     justifyContent: "center",

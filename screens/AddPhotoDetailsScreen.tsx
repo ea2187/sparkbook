@@ -12,6 +12,8 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import type { RouteProp, NavigationProp } from "@react-navigation/native";
@@ -34,9 +36,11 @@ const AddPhotoDetailsScreen: FC = () => {
 
   const [photoName, setPhotoName] = useState("");
   const [boards, setBoards] = useState<any[]>([]);
-  const [selectedBoardId, setSelectedBoardId] = useState<string>("");
+  const [selectedBoardIds, setSelectedBoardIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [loadingBoards, setLoadingBoards] = useState(true);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [addedBoardNames, setAddedBoardNames] = useState<string[]>([]);
 
   useEffect(() => {
     fetchBoards();
@@ -51,44 +55,45 @@ const AddPhotoDetailsScreen: FC = () => {
 
     if (!error && data) {
       setBoards(data);
-      if (data.length > 0) {
-        setSelectedBoardId(data[0].id);
-      }
     } else {
       Alert.alert("Error", "Failed to load boards");
     }
     setLoadingBoards(false);
   }
 
-  function handleContinue() {
+  function toggleBoardSelection(boardId: string) {
+    setSelectedBoardIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(boardId)) {
+        newSet.delete(boardId);
+      } else {
+        newSet.add(boardId);
+      }
+      return newSet;
+    });
+  }
+
+  async function handleContinue() {
     if (!photoName.trim()) {
       Alert.alert("Missing Name", "Please enter a name for your photo");
       return;
     }
 
-    if (!selectedBoardId) {
-      Alert.alert("No Board Selected", "Please select a board");
+    if (selectedBoardIds.size === 0) {
+      Alert.alert("No Board Selected", "Please select at least one board");
       return;
     }
 
-    // Navigate immediately to board
-    navigation.navigate("Board", { boardId: selectedBoardId });
-
-    // Upload in background
-    uploadInBackground();
-  }
-
-  async function uploadInBackground() {
+    setLoading(true);
+    
     try {
-      // Set global flag for upload in progress
-      (global as any).__uploadingPhoto = true;
-      
-      // Upload image to Supabase Storage
-      const uploadedUrl = await uploadImageAsync(imageUri, selectedBoardId);
+      // Upload image to Supabase Storage (use first selected board for storage path)
+      const firstBoardId = Array.from(selectedBoardIds)[0];
+      const uploadedUrl = await uploadImageAsync(imageUri, firstBoardId);
       
       if (!uploadedUrl) {
-        console.error("Upload failed");
-        (global as any).__uploadingPhoto = false;
+        Alert.alert("Error", "Failed to upload photo");
+        setLoading(false);
         return;
       }
 
@@ -96,14 +101,36 @@ const AddPhotoDetailsScreen: FC = () => {
       const spawnX = SCREEN_WIDTH * 2.5 + (Math.random() * 200 - 100);
       const spawnY = SCREEN_HEIGHT * 2.5 + (Math.random() * 200 - 100);
 
-      // Create spark in database
-      await createSpark(selectedBoardId, uploadedUrl, spawnX, spawnY);
+      // Create spark in all selected boards
+      await Promise.all(
+        Array.from(selectedBoardIds).map(boardId =>
+          createSpark(boardId, uploadedUrl, spawnX, spawnY)
+        )
+      );
       
-      console.log("✅ Photo uploaded successfully");
-      (global as any).__uploadingPhoto = false;
+      // Get board names for success message
+      const addedBoards = boards.filter(board => selectedBoardIds.has(board.id));
+      const boardNames = addedBoards.map(board => board.name);
+      
+      // Navigate based on selection count
+      if (selectedBoardIds.size === 1) {
+        // Single board: navigate to that board
+        navigation.navigate("Board", { boardId: firstBoardId });
+      } else {
+        // Multiple boards: show success message then go home
+        setAddedBoardNames(boardNames);
+        setShowSuccessModal(true);
+        // Auto-dismiss after 2 seconds and navigate home
+        setTimeout(() => {
+          setShowSuccessModal(false);
+          navigation.navigate("HomeMain");
+        }, 2000);
+      }
     } catch (error) {
       console.error("Error uploading photo:", error);
-      (global as any).__uploadingPhoto = false;
+      Alert.alert("Error", "Failed to add photo to boards");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -149,7 +176,12 @@ const AddPhotoDetailsScreen: FC = () => {
 
           {/* Board Selection */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Select Board</Text>
+            <Text style={styles.label}>Select Boards</Text>
+            <Text style={styles.subLabel}>
+              {selectedBoardIds.size === 0 
+                ? "Select at least one board" 
+                : `${selectedBoardIds.size} board${selectedBoardIds.size > 1 ? 's' : ''} selected`}
+            </Text>
             {loadingBoards ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color={theme.colors.primary} />
@@ -159,41 +191,40 @@ const AddPhotoDetailsScreen: FC = () => {
               <Text style={styles.emptyText}>No boards available</Text>
             ) : (
               <View style={styles.boardList}>
-                {boards.map((board) => (
-                  <TouchableOpacity
-                    key={board.id}
-                    style={[
-                      styles.boardOption,
-                      selectedBoardId === board.id && styles.boardOptionSelected,
-                    ]}
-                    onPress={() => setSelectedBoardId(board.id)}
-                    disabled={loading}
-                  >
-                    <View style={styles.boardOptionContent}>
-                      <Ionicons
-                        name={
-                          selectedBoardId === board.id
-                            ? "radio-button-on"
-                            : "radio-button-off"
-                        }
-                        size={24}
-                        color={
-                          selectedBoardId === board.id
-                            ? theme.colors.primary
-                            : theme.colors.textLight
-                        }
-                      />
-                      <Text
-                        style={[
-                          styles.boardName,
-                          selectedBoardId === board.id && styles.boardNameSelected,
-                        ]}
-                      >
-                        {board.name}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                {boards.map((board) => {
+                  const isSelected = selectedBoardIds.has(board.id);
+                  return (
+                    <TouchableOpacity
+                      key={board.id}
+                      style={[
+                        styles.boardOption,
+                        isSelected && styles.boardOptionSelected,
+                      ]}
+                      onPress={() => toggleBoardSelection(board.id)}
+                      disabled={loading}
+                    >
+                      <View style={styles.boardOptionContent}>
+                        <Ionicons
+                          name={isSelected ? "checkbox" : "square-outline"}
+                          size={24}
+                          color={
+                            isSelected
+                              ? theme.colors.primary
+                              : theme.colors.textLight
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.boardName,
+                            isSelected && styles.boardNameSelected,
+                          ]}
+                        >
+                          {board.name}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -203,13 +234,55 @@ const AddPhotoDetailsScreen: FC = () => {
       {/* Continue Button */}
       <View style={styles.bottomContainer}>
         <TouchableOpacity
-          style={styles.continueButton}
+          style={[
+            styles.continueButton,
+            (loadingBoards || boards.length === 0 || selectedBoardIds.size === 0) && styles.continueButtonDisabled
+          ]}
           onPress={handleContinue}
-          disabled={loadingBoards || boards.length === 0}
+          disabled={loadingBoards || boards.length === 0 || selectedBoardIds.size === 0 || loading}
         >
-          <Text style={styles.continueButtonText}>Add</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color={theme.colors.white} />
+          ) : (
+            <Text style={styles.continueButtonText}>
+              Add to {selectedBoardIds.size > 0 ? `${selectedBoardIds.size} board${selectedBoardIds.size > 1 ? 's' : ''}` : 'board'}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
+
+      {/* Success Modal for Multiple Boards */}
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowSuccessModal(false);
+          navigation.navigate("HomeMain");
+        }}
+      >
+        <TouchableWithoutFeedback onPress={() => {
+          setShowSuccessModal(false);
+          navigation.navigate("HomeMain");
+        }}>
+          <View style={styles.successModalOverlay}>
+            <View style={styles.successModalContent}>
+              <Ionicons name="checkmark-circle" size={48} color={theme.colors.success} />
+              <Text style={styles.successModalTitle}>Photo Added!</Text>
+              <Text style={styles.successModalSubtitle}>
+                Added to {addedBoardNames.length} board{addedBoardNames.length > 1 ? 's' : ''}:
+              </Text>
+              <View style={styles.successBoardList}>
+                {addedBoardNames.map((name, index) => (
+                  <Text key={index} style={styles.successBoardName}>
+                    • {name}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -223,7 +296,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 50,
+    paddingTop: 70,
     paddingHorizontal: 20,
     paddingBottom: 16,
     backgroundColor: theme.colors.white,
@@ -264,7 +337,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.textPrimary,
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  subLabel: {
+    fontSize: 12,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    marginBottom: 12,
   },
   input: {
     backgroundColor: theme.colors.light,
@@ -352,6 +431,47 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.white,
+  },
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  successModalContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    ...theme.shadows.lg,
+  },
+  successModalTitle: {
+    fontSize: theme.typography.fontSize.xl,
+    fontFamily: theme.typography.fontFamily.bold,
+    color: theme.colors.textPrimary,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  successModalSubtitle: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  successBoardList: {
+    width: '100%',
+    alignItems: 'flex-start',
+    marginTop: 8,
+  },
+  successBoardName: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.textPrimary,
+    marginBottom: 4,
   },
 });
 

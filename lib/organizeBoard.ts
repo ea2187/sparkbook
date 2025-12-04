@@ -25,40 +25,46 @@ export function organizeBoardSimple(
   sparks: SparkInfo[],
   method: 'grid' | 'spacing' | 'byType',
   boardWidth: number,
-  boardHeight: number
+  boardHeight: number,
+  viewportX: number = boardWidth / 2 - boardWidth / 2,
+  viewportY: number = boardHeight / 2 - boardHeight / 2
 ): OrganizedPosition[] {
   if (sparks.length === 0) return [];
 
   const positions: OrganizedPosition[] = [];
   const padding = 30;
   
-  // Start organizing from the center of the board (where the viewport is)
-  const centerX = boardWidth / 2;
-  const centerY = boardHeight / 2;
+  // Start organizing from the top-left of the viewport
+  const startX = viewportX + padding;
+  const startY = viewportY + padding;
   
   // Calculate grid dimensions
   const cols = Math.ceil(Math.sqrt(sparks.length));
   const cellWidth = 250; // Fixed cell width
   const cellHeight = 200; // Fixed cell height
   
-  // Calculate starting position (top-left of grid, centered)
-  const gridWidth = cols * cellWidth;
-  const startX = centerX - gridWidth / 2;
-  const startY = centerY - 200; // Start a bit above center
+  // Calculate starting position (top-left of grid within viewport)
+  const availableWidth = boardWidth - padding * 2;
+  const gridWidth = Math.min(cols * cellWidth, availableWidth);
+  const gridStartX = startX + Math.max(0, (availableWidth - gridWidth) / 2);
+  const gridStartY = startY;
 
   if (method === 'grid') {
-    // Arrange in a grid centered on the board
+    // Arrange in a grid within the viewport
     sparks.forEach((spark, index) => {
       const row = Math.floor(index / cols);
       const col = index % cols;
+      const x = gridStartX + col * cellWidth + (cellWidth - spark.width) / 2;
+      const y = gridStartY + row * cellHeight + (cellHeight - spark.height) / 2;
+      // Allow items to extend beyond viewport if needed
       positions.push({
         id: spark.id,
-        x: Math.max(padding, startX + col * cellWidth + (cellWidth - spark.width) / 2),
-        y: Math.max(padding, startY + row * cellHeight + (cellHeight - spark.height) / 2),
+        x,
+        y,
       });
     });
   } else if (method === 'byType') {
-    // Group by type, centered
+    // Group by type within viewport
     const byType: { [key: string]: SparkInfo[] } = {};
     sparks.forEach(spark => {
       if (!byType[spark.type]) byType[spark.type] = [];
@@ -69,39 +75,43 @@ export function organizeBoardSimple(
     Object.keys(byType).forEach(type => {
       const typeSparks = byType[type];
       const typeCols = Math.ceil(Math.sqrt(typeSparks.length));
-      const typeGridWidth = typeCols * cellWidth;
-      const typeStartX = centerX - typeGridWidth / 2;
+      const typeGridWidth = Math.min(typeCols * cellWidth, availableWidth);
+      const typeStartX = startX + Math.max(0, (availableWidth - typeGridWidth) / 2);
       
       typeSparks.forEach((spark, index) => {
         const row = Math.floor(index / typeCols);
         const col = index % typeCols;
+        const x = typeStartX + col * cellWidth + (cellWidth - spark.width) / 2;
+        const y = currentY + row * cellHeight + (cellHeight - spark.height) / 2;
+        // Allow items to extend beyond viewport if needed
         positions.push({
           id: spark.id,
-          x: Math.max(padding, typeStartX + col * cellWidth + (cellWidth - spark.width) / 2),
-          y: Math.max(padding, currentY + row * cellHeight + (cellHeight - spark.height) / 2),
+          x,
+          y,
         });
       });
       currentY += Math.ceil(typeSparks.length / typeCols) * cellHeight + padding;
     });
   } else {
-    // Smart spacing - maintain relative positions but remove overlaps, centered
+    // Smart spacing - maintain relative positions but remove overlaps, within viewport
     const sorted = [...sparks].sort((a, b) => a.x - b.x || a.y - b.y);
     const totalWidth = sorted.reduce((sum, s) => sum + s.width + padding, 0);
-    let currentX = Math.max(padding, centerX - totalWidth / 2);
+    const availableWidth = boardWidth - padding * 2;
+    let currentX = startX + Math.max(0, (availableWidth - totalWidth) / 2);
     let currentY = startY;
     let maxHeightInRow = 0;
 
     sorted.forEach(spark => {
-      if (currentX + spark.width > boardWidth - padding) {
-        const rowWidth = sorted.slice(0, sorted.indexOf(spark)).reduce((sum, s) => sum + s.width + padding, 0);
-        currentX = Math.max(padding, centerX - rowWidth / 2);
+      if (currentX + spark.width > viewportX + boardWidth - padding) {
+        currentX = startX;
         currentY += maxHeightInRow + padding;
         maxHeightInRow = 0;
       }
+      // Allow items to extend beyond viewport if needed
       positions.push({
         id: spark.id,
-        x: Math.max(padding, currentX),
-        y: Math.max(padding, currentY),
+        x: currentX,
+        y: currentY,
       });
       currentX += spark.width + padding;
       maxHeightInRow = Math.max(maxHeightInRow, spark.height);

@@ -74,6 +74,9 @@ const BoardScreen: FC = () => {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const historyRef = useRef({ history: [] as any[][], index: -1 });
 
+  // Track scroll position for viewport-based organization
+  const [scrollX, setScrollX] = useState((BOARD_WIDTH - SCREEN_WIDTH) / 2);
+  const [scrollY, setScrollY] = useState((BOARD_HEIGHT - SCREEN_HEIGHT) / 2);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -213,7 +216,7 @@ const BoardScreen: FC = () => {
   }
 
   function handleZoomOut() {
-    const newZoom = Math.max(zoom - 0.25, 0.5);
+    const newZoom = Math.max(zoom - 0.25, 0.1);
     setZoom(newZoom);
     Animated.spring(zoomAnim, {
       toValue: newZoom,
@@ -386,12 +389,20 @@ const BoardScreen: FC = () => {
         height: spark.height,
       }));
 
-      // Get organized positions using simple organization
+      // Calculate viewport bounds (current visible area)
+      const viewportX = scrollX;
+      const viewportY = scrollY;
+      const viewportWidth = SCREEN_WIDTH;
+      const viewportHeight = SCREEN_HEIGHT;
+      
+      // Get organized positions using simple organization within viewport
       const organizedPositions = organizeBoardSimple(
         sparkInfo,
         method,
-        BOARD_WIDTH,
-        BOARD_HEIGHT
+        viewportWidth,
+        viewportHeight,
+        viewportX,
+        viewportY
       );
 
       // Save current state to history before organizing
@@ -420,16 +431,7 @@ const BoardScreen: FC = () => {
         }
       }
 
-      // Scroll to center where sparks are organized
-      if (scrollViewRef.current && organizedPositions.length > 0) {
-        const firstPos = organizedPositions[0];
-        // Scroll to show the organized area (centered)
-        scrollViewRef.current.scrollTo({
-          x: Math.max(0, firstPos.x - SCREEN_WIDTH / 2),
-          y: Math.max(0, firstPos.y - SCREEN_HEIGHT / 2),
-          animated: true,
-        });
-      }
+      // No need to scroll since we're organizing within the current viewport
 
       setOrganizeModalVisible(false);
       Alert.alert("Success", "Board organized successfully!");
@@ -526,18 +528,37 @@ const BoardScreen: FC = () => {
         <View style={styles.leftHeaderContainer}>
           <TouchableOpacity 
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => navigation.navigate('HomeMain')}
           >
             <Image source={require("../assets/selected home.png")} style={styles.backButtonIcon} />
           </TouchableOpacity>
         </View>
         
-        <TouchableOpacity
-          style={styles.helpButtonHeader}
-          onPress={() => setHelpModalVisible(true)}
-        >
-          <Ionicons name="information-circle" size={20} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
+        {/* UNDO/REDO BUTTONS - moved to left side */}
+        <View style={styles.undoRedoContainer}>
+          <TouchableOpacity 
+            style={[styles.undoRedoButton, historyIndex <= 0 && styles.undoRedoButtonDisabled]}
+            onPress={handleUndo}
+            disabled={historyIndex <= 0}
+          >
+          <Ionicons 
+            name="arrow-undo" 
+            size={16} 
+            color={historyIndex <= 0 ? theme.colors.textLight : theme.colors.textPrimary} 
+          />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.undoRedoButton, historyIndex >= history.length - 1 && styles.undoRedoButtonDisabled]}
+            onPress={handleRedo}
+            disabled={historyIndex >= history.length - 1}
+          >
+          <Ionicons 
+            name="arrow-redo" 
+            size={16} 
+            color={historyIndex >= history.length - 1 ? theme.colors.textLight : theme.colors.textPrimary} 
+          />
+          </TouchableOpacity>
+        </View>
         
         <View style={styles.headerTitleContainer}>
           <View style={styles.boardNameDropdownContainer}>
@@ -558,32 +579,15 @@ const BoardScreen: FC = () => {
           )}
         </View>
 
+        {/* HELP BUTTON - centered between title and organize button */}
+        <TouchableOpacity
+          style={styles.helpButtonHeader}
+          onPress={() => setHelpModalVisible(true)}
+        >
+          <Ionicons name="information-circle" size={20} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
+
         <View style={styles.rightButtonsContainer}>
-          {/* UNDO/REDO BUTTONS */}
-          <View style={styles.undoRedoContainer}>
-            <TouchableOpacity 
-              style={[styles.undoRedoButton, historyIndex <= 0 && styles.undoRedoButtonDisabled]}
-              onPress={handleUndo}
-              disabled={historyIndex <= 0}
-            >
-            <Ionicons 
-              name="arrow-undo" 
-              size={20} 
-              color={historyIndex <= 0 ? theme.colors.textLight : theme.colors.textPrimary} 
-            />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.undoRedoButton, historyIndex >= history.length - 1 && styles.undoRedoButtonDisabled]}
-              onPress={handleRedo}
-              disabled={historyIndex >= history.length - 1}
-            >
-            <Ionicons 
-              name="arrow-redo" 
-              size={20} 
-              color={historyIndex >= history.length - 1 ? theme.colors.textLight : theme.colors.textPrimary} 
-            />
-            </TouchableOpacity>
-          </View>
           {/* ORGANIZE BUTTON */}
           <View style={styles.organizeContainer}>
             <TouchableOpacity
@@ -614,6 +618,12 @@ const BoardScreen: FC = () => {
         contentContainerStyle={styles.canvasContainer}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
+        onScroll={(event) => {
+          const { contentOffset } = event.nativeEvent;
+          setScrollX(contentOffset.x);
+          setScrollY(contentOffset.y);
+        }}
+        scrollEventThrottle={16}
       >
         {/* GRID */}
         {gridVisible && (
@@ -920,7 +930,7 @@ const styles = StyleSheet.create({
   },
   helpButtonHeader: {
     position: "absolute",
-    left: 100,
+    right: 75,
     top: 50,
     bottom: 12,
     width: 40,
@@ -999,16 +1009,20 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   undoRedoContainer: {
+    position: "absolute",
+    left: 75,
+    top: 50,
+    bottom: 12,
     flexDirection: "row",
     gap: 6,
     zIndex: 10001,
     alignItems: "center",
   },
   undoRedoButton: {
-    width: 40,
-    height: 40,
+    width: 32,
+    height: 32,
     backgroundColor: theme.colors.white,
-    borderRadius: 20,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     ...theme.shadows.md,

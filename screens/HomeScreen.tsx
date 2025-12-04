@@ -12,6 +12,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
+  Image,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -34,17 +36,57 @@ const HomeScreen: FC = () => {
   const [newBoardName, setNewBoardName] = useState('');
   const [showBoardOptions, setShowBoardOptions] = useState(false);
   const [selectedBoard, setSelectedBoard] = useState<Board | null>(null);
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
   useEffect(() => {
     fetchBoards();
+    loadUserProfile();
   }, []);
 
   // Refetch boards when screen comes into focus (e.g., after deleting images)
   useFocusEffect(
     useCallback(() => {
       fetchBoards();
+      loadUserProfile();
     }, [])
   );
+
+  async function loadUserProfile() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const metadata = user.user_metadata || {};
+        const picture = metadata.profile_picture || metadata.profilePicture || null;
+        setProfilePicture(picture);
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        Alert.alert('Error', 'Failed to log out');
+      } else {
+        setShowProfileDropdown(false);
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+      Alert.alert('Error', 'An unexpected error occurred while logging out');
+    }
+  }
+
+  function handleProfilePress() {
+    setShowProfileDropdown(!showProfileDropdown);
+  }
+
+  function handleGoToProfile() {
+    setShowProfileDropdown(false);
+    navigation.navigate('Profile');
+  }
 
   async function fetchBoards() {
     try {
@@ -61,29 +103,78 @@ const HomeScreen: FC = () => {
         return;
       }
 
-      // Fetch preview images for each board (first 4 image-type sparks with valid content_url)
+      // Fetch all sparks for each board preview
       const boardsWithPreviews = await Promise.all(
         (boardsData || []).map(async (board) => {
-          // Fetch only image-type sparks with valid content_url, then take first 4
-          const { data: sparks } = await supabase
-            .from('sparks')
-            .select('content_url')
-            .eq('board_id', board.id)
-            .eq('type', 'image')
-            .not('content_url', 'is', null)
-            .neq('content_url', '')
-            .order('created_at', { ascending: false });
+          try {
+            // Fetch all sparks with their type and content
+            const { data: sparks, error: sparksError } = await supabase
+              .from('sparks')
+              .select('id, type, content_url, title, text_content')
+              .eq('board_id', board.id)
+              .order('created_at', { ascending: false });
 
-          // Filter out empty strings and ensure we only use valid image URLs, take first 4
-          const thumbnail_urls = (sparks || [])
-            .map(s => s.content_url)
-            .filter((url): url is string => url != null && url !== '')
-            .slice(0, 4);
+            if (sparksError) {
+              console.error('Error fetching sparks for board:', board.id, sparksError);
+              // Fallback to empty preview
+              return {
+                ...board,
+                previewItems: [],
+                thumbnail_urls: [],
+              };
+            }
 
-          return {
-            ...board,
-            thumbnail_urls,
-          };
+            // Process sparks to get preview data
+            const previewItems = (sparks || []).map((spark) => {
+              let imageUrl: string | null = null;
+              let iconType: 'image' | 'note' | 'music' | 'audio' = 'audio';
+              let textContent: string | null = null;
+              
+              if (spark.type === 'image' && spark.content_url) {
+                imageUrl = spark.content_url;
+                iconType = 'image';
+              } else if (spark.type === 'note') {
+                iconType = 'note';
+                textContent = spark.text_content || null;
+              } else if (spark.type === 'audio') {
+                // Check if it's music (has albumImage) or audio
+                let metadata = null;
+                if (spark.text_content) {
+                  try {
+                    metadata = JSON.parse(spark.text_content);
+                  } catch (e) {
+                    // text_content might not be JSON
+                  }
+                }
+                if (metadata?.albumImage || metadata?.album_image) {
+                  imageUrl = metadata.albumImage || metadata.album_image;
+                  iconType = 'music';
+                } else {
+                  iconType = 'audio';
+                }
+              }
+              
+              return {
+                id: spark.id,
+                type: iconType,
+                imageUrl,
+                textContent,
+              };
+            });
+
+            return {
+              ...board,
+              previewItems: previewItems.slice(0, 8), // Show up to 8 items
+            };
+          } catch (error) {
+            console.error('Error processing board preview:', board.id, error);
+            // Fallback to empty preview
+            return {
+              ...board,
+              previewItems: [],
+              thumbnail_urls: [],
+            };
+          }
         })
       );
 
@@ -180,7 +271,13 @@ const HomeScreen: FC = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <>
+      {showProfileDropdown && (
+        <TouchableWithoutFeedback onPress={() => setShowProfileDropdown(false)}>
+          <View style={styles.fullScreenOverlay} />
+        </TouchableWithoutFeedback>
+      )}
+      <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.searchContainer}>
@@ -193,11 +290,40 @@ const HomeScreen: FC = () => {
             placeholderTextColor={theme.colors.textSecondary}
           />
         </View>
-        <Pressable style={styles.avatarButton}>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={24} color={theme.colors.white} />
-          </View>
-        </Pressable>
+        <View style={styles.profileContainer}>
+          <Pressable 
+            style={styles.avatarButton}
+            onPress={handleProfilePress}
+          >
+            {profilePicture ? (
+              <Image source={{ uri: profilePicture }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatar}>
+                <Ionicons name="person" size={24} color={theme.colors.white} />
+              </View>
+            )}
+          </Pressable>
+          
+          {showProfileDropdown && (
+            <View style={styles.profileDropdown}>
+                <Pressable 
+                  style={styles.dropdownItem}
+                  onPress={handleGoToProfile}
+                >
+                  <Ionicons name="person-outline" size={20} color={theme.colors.textPrimary} />
+                  <Text style={styles.dropdownItemText}>Profile</Text>
+                </Pressable>
+                <View style={styles.dropdownDivider} />
+                <Pressable 
+                  style={styles.dropdownItem}
+                  onPress={handleLogout}
+                >
+                  <Ionicons name="log-out-outline" size={20} color={theme.colors.error} />
+                  <Text style={[styles.dropdownItemText, { color: theme.colors.error }]}>Log out</Text>
+                </Pressable>
+              </View>
+          )}
+        </View>
       </View>
 
       {/* Action Buttons Row */}
@@ -257,7 +383,8 @@ const HomeScreen: FC = () => {
             <BoardPreviewCard
               key={board.id}
               title={board.name}
-              previewImages={board.thumbnail_urls}
+              previewItems={(board as any).previewItems}
+              previewImages={(board as any).thumbnail_urls}
               onPress={() => handleBoardPress(board)}
               onLongPress={() => handleBoardLongPress(board)}
               onMenuPress={() => handleBoardLongPress(board)}
@@ -283,7 +410,7 @@ const HomeScreen: FC = () => {
             <Text style={styles.modalSubtitle}>Enter Sparklette Name:</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Name"
+              placeholder="Enter sparklette name"
               placeholderTextColor={theme.colors.textLight}
               value={newBoardName}
               onChangeText={setNewBoardName}
@@ -321,6 +448,7 @@ const HomeScreen: FC = () => {
         />
       )}
     </View>
+    </>
   );
 };
 
@@ -359,6 +487,10 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textPrimary,
   },
+  profileContainer: {
+    position: 'relative',
+    zIndex: 1000,
+  },
   avatarButton: {
     width: 44,
     height: 44,
@@ -372,6 +504,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
+  },
+  avatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: theme.colors.secondary,
+  },
+  fullScreenOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 998,
+  },
+  profileDropdown: {
+    position: 'absolute',
+    top: 50,
+    right: 0,
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    minWidth: 140,
+    paddingVertical: 4,
+    zIndex: 1001,
+    ...theme.shadows.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 10,
+  },
+  dropdownItemText: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+  },
+  dropdownDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+    marginVertical: 4,
   },
   actionRow: {
     maxHeight: 80,

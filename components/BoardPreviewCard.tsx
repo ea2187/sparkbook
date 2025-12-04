@@ -1,19 +1,19 @@
 import React, { FC } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import theme from '../styles/theme';
 
-// Placeholder images for empty boards
-const PLACEHOLDER_IMAGES = [
-  'https://via.placeholder.com/60/919FD5/FFFFFF?text=1',
-  'https://via.placeholder.com/60/336BC8/FFFFFF?text=2',
-  'https://via.placeholder.com/60/D4A518/FFFFFF?text=3',
-  'https://via.placeholder.com/60/E8EFFF/666666?text=4',
-];
+interface PreviewItem {
+  id: string;
+  type: 'image' | 'note' | 'music' | 'audio';
+  imageUrl: string | null;
+  textContent?: string | null;
+}
 
 interface BoardPreviewCardProps {
   title: string;
   previewImages?: string[];
+  previewItems?: PreviewItem[];
   onPress: () => void;
   onLongPress?: () => void;
   onMenuPress?: () => void;
@@ -22,14 +22,29 @@ interface BoardPreviewCardProps {
 const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
   title,
   previewImages = [],
+  previewItems = [],
   onPress,
   onLongPress,
   onMenuPress,
 }) => {
-  // Use provided images or fallback to placeholders
-  const displayImages = previewImages.length > 0 
-    ? previewImages.slice(0, 4) 
-    : PLACEHOLDER_IMAGES;
+  // Use previewItems if available, otherwise fallback to previewImages for backwards compatibility
+  const displayItems = previewItems.length > 0 
+    ? previewItems 
+    : previewImages.map((url, index) => ({
+        id: `img-${index}`,
+        type: 'image' as const,
+        imageUrl: url,
+      }));
+
+  const getIconName = (type: 'image' | 'note' | 'music' | 'audio'): "image-outline" | "document-text" | "musical-notes" | "play-circle" => {
+    switch (type) {
+      case 'note': return 'document-text';
+      case 'music': return 'musical-notes';
+      case 'audio': return 'play-circle';
+      case 'image': return 'image-outline';
+      default: return 'image-outline';
+    }
+  };
 
   return (
     <TouchableOpacity 
@@ -38,19 +53,52 @@ const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
       onLongPress={onLongPress}
       activeOpacity={0.7}
     >
-      {/* Preview thumbnails row */}
+      {/* Preview thumbnails row - scrollable */}
       <View style={styles.previewRowContainer}>
-        <View style={styles.previewRow}>
-          {displayImages.map((imageUrl, index) => (
-            <View key={index} style={styles.thumbnailContainer}>
-              <Image 
-                source={{ uri: imageUrl }}
-                style={styles.thumbnail}
-                resizeMode="cover"
-              />
+        {displayItems.length > 0 ? (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.previewRow}
+          >
+            {displayItems.map((item) => (
+              <View key={item.id} style={styles.thumbnailContainer}>
+                {item.imageUrl ? (
+                  <Image 
+                    source={{ uri: item.imageUrl }}
+                    style={styles.thumbnail}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.thumbnailPlaceholder}>
+                    {item.type === 'note' && item.textContent ? (
+                      <View style={styles.notePreview}>
+                        <Text style={styles.noteText} numberOfLines={2}>
+                          {item.textContent}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Ionicons 
+                        name={getIconName(item.type)} 
+                        size={24} 
+                        color={theme.colors.textLight} 
+                      />
+                    )}
+                  </View>
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        ) : (
+          // Empty state - show placeholder
+          <View style={styles.previewRow}>
+            <View style={styles.thumbnailContainer}>
+              <View style={styles.thumbnailPlaceholder}>
+                <Ionicons name="sparkles" size={24} color={theme.colors.textLight} />
+              </View>
             </View>
-          ))}
-        </View>
+          </View>
+        )}
       </View>
 
       {/* Divider line */}
@@ -90,15 +138,14 @@ const styles = StyleSheet.create({
   previewRowContainer: {
     width: '100%',
     alignSelf: 'stretch',
+    height: 60,
+    marginBottom: 8,
   },
   previewRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
     alignItems: 'flex-start',
     gap: 8,
-    marginBottom: 8,
-    flexWrap: 'nowrap',
-    width: '100%',
+    paddingRight: 8,
   },
   thumbnailContainer: {
     width: 60,
@@ -109,6 +156,29 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: '100%',
     height: '100%',
+  },
+  thumbnailPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: theme.colors.light,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notePreview: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: theme.colors.light,
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  noteText: {
+    fontSize: 8,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    lineHeight: 10,
+    textAlign: 'center',
   },
   divider: {
     height: 1,
