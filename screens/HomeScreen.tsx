@@ -1,4 +1,4 @@
-import React, { FC, useState, useEffect } from 'react';
+import React, { FC, useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,9 +11,10 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import theme from '../styles/theme';
 import { supabase } from '../lib/supabase';
@@ -27,6 +28,7 @@ const HomeScreen: FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newBoardName, setNewBoardName] = useState('');
@@ -36,6 +38,13 @@ const HomeScreen: FC = () => {
   useEffect(() => {
     fetchBoards();
   }, []);
+
+  // Refetch boards when screen comes into focus (e.g., after deleting images)
+  useFocusEffect(
+    useCallback(() => {
+      fetchBoards();
+    }, [])
+  );
 
   async function fetchBoards() {
     try {
@@ -48,24 +57,28 @@ const HomeScreen: FC = () => {
         console.error('Error fetching boards:', error);
         Alert.alert('Error', 'Failed to load boards');
         setLoading(false);
+        setRefreshing(false);
         return;
       }
 
-      // Fetch preview images for each board (first 4 sparks with valid content_url)
+      // Fetch preview images for each board (first 4 image-type sparks with valid content_url)
       const boardsWithPreviews = await Promise.all(
         (boardsData || []).map(async (board) => {
-          // Fetch more sparks to ensure we get 4 valid ones (some might have null content_url)
+          // Fetch only image-type sparks with valid content_url, then take first 4
           const { data: sparks } = await supabase
             .from('sparks')
             .select('content_url')
             .eq('board_id', board.id)
+            .eq('type', 'image')
             .not('content_url', 'is', null)
-            .limit(4);
+            .neq('content_url', '')
+            .order('created_at', { ascending: false });
 
-          // Filter out empty strings and ensure we only use valid image URLs
-          const thumbnail_urls = sparks
-            ?.map(s => s.content_url)
-            .filter((url): url is string => url != null && url !== '') || [];
+          // Filter out empty strings and ensure we only use valid image URLs, take first 4
+          const thumbnail_urls = (sparks || [])
+            .map(s => s.content_url)
+            .filter((url): url is string => url != null && url !== '')
+            .slice(0, 4);
 
           return {
             ...board,
@@ -79,7 +92,13 @@ const HomeScreen: FC = () => {
       console.error('Unexpected error:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await fetchBoards();
   }
 
   async function createBoard(name: string) {
@@ -209,6 +228,13 @@ const HomeScreen: FC = () => {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+          />
+        }
       >
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -396,6 +422,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: theme.spacing.md,
     paddingBottom: 100, // Extra padding for floating button
+    alignItems: 'flex-start',
   },
   loadingContainer: {
     flex: 1,

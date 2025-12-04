@@ -39,16 +39,18 @@ const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
       activeOpacity={0.7}
     >
       {/* Preview thumbnails row */}
-      <View style={styles.previewRow}>
-        {displayImages.map((imageUrl, index) => (
-          <View key={index} style={styles.thumbnailContainer}>
-            <Image 
-              source={{ uri: imageUrl }}
-              style={styles.thumbnail}
-              resizeMode="cover"
-            />
-          </View>
-        ))}
+      <View style={styles.previewRowContainer}>
+        <View style={styles.previewRow}>
+          {displayImages.map((imageUrl, index) => (
+            <View key={index} style={styles.thumbnailContainer}>
+              <Image 
+                source={{ uri: imageUrl }}
+                style={styles.thumbnail}
+                resizeMode="cover"
+              />
+            </View>
+          ))}
+        </View>
       </View>
 
       {/* Divider line */}
@@ -82,11 +84,21 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     ...theme.shadows.md,
     position: 'relative',
+    alignSelf: 'stretch',
+    width: '100%',
+  },
+  previewRowContainer: {
+    width: '100%',
+    alignSelf: 'stretch',
   },
   previewRow: {
     flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
     gap: 8,
     marginBottom: 8,
+    flexWrap: 'nowrap',
+    width: '100%',
   },
   thumbnailContainer: {
     width: 60,

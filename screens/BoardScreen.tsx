@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp, NavigationProp } from "@react-navigation/native";
@@ -66,6 +67,7 @@ const BoardScreen: FC = () => {
   const [organizeModalVisible, setOrganizeModalVisible] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [helpModalVisible, setHelpModalVisible] = useState(false);
+  const [boardNameModalVisible, setBoardNameModalVisible] = useState(false);
   
   // Undo/Redo state
   const [history, setHistory] = useState<any[][]>([]);
@@ -517,14 +519,35 @@ const BoardScreen: FC = () => {
           >
             <Image source={require("../assets/selected home.png")} style={styles.backButtonIcon} />
           </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">{boardName}</Text>
-            {uploading && (
-              <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
+        </View>
+        
+        <TouchableOpacity
+          style={styles.helpButtonHeader}
+          onPress={() => setHelpModalVisible(true)}
+        >
+          <Ionicons name="information-circle" size={20} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
+        
+        <View style={styles.headerTitleContainer}>
+          <View style={styles.boardNameDropdownContainer}>
+            <TouchableOpacity
+              onPress={() => setBoardNameModalVisible(!boardNameModalVisible)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">{boardName}</Text>
+            </TouchableOpacity>
+            {boardNameModalVisible && (
+              <View style={styles.boardNameDropdown}>
+                <Text style={styles.boardNameDropdownText}>{boardName}</Text>
+              </View>
             )}
           </View>
+          {uploading && (
+            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginLeft: 8 }} />
+          )}
         </View>
-        <View style={styles.rightHeaderContainer}>
+
+        <View style={styles.rightButtonsContainer}>
           {/* UNDO/REDO BUTTONS */}
           <View style={styles.undoRedoContainer}>
             <TouchableOpacity 
@@ -532,22 +555,22 @@ const BoardScreen: FC = () => {
               onPress={handleUndo}
               disabled={historyIndex <= 0}
             >
-              <Ionicons 
-                name="arrow-undo" 
-                size={20} 
-                color={historyIndex <= 0 ? theme.colors.textLight : theme.colors.textPrimary} 
-              />
+            <Ionicons 
+              name="arrow-undo" 
+              size={20} 
+              color={historyIndex <= 0 ? theme.colors.textLight : theme.colors.textPrimary} 
+            />
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.undoRedoButton, historyIndex >= history.length - 1 && styles.undoRedoButtonDisabled]}
               onPress={handleRedo}
               disabled={historyIndex >= history.length - 1}
             >
-              <Ionicons 
-                name="arrow-redo" 
-                size={20} 
-                color={historyIndex >= history.length - 1 ? theme.colors.textLight : theme.colors.textPrimary} 
-              />
+            <Ionicons 
+              name="arrow-redo" 
+              size={20} 
+              color={historyIndex >= history.length - 1 ? theme.colors.textLight : theme.colors.textPrimary} 
+            />
             </TouchableOpacity>
           </View>
           {/* ORGANIZE BUTTON */}
@@ -556,7 +579,7 @@ const BoardScreen: FC = () => {
               style={styles.organizeButton}
               onPress={() => setOrganizeModalVisible(true)}
             >
-              <Ionicons name="sparkles" size={22} color={theme.colors.textPrimary} />
+              <Ionicons name="sparkles" size={20} color={theme.colors.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -646,13 +669,6 @@ const BoardScreen: FC = () => {
         </Animated.View>
       </ScrollView>
 
-      {/* HELP BUTTON */}
-      <TouchableOpacity
-        style={styles.helpButtonFloating}
-        onPress={() => setHelpModalVisible(true)}
-      >
-        <Ionicons name="information-circle" size={28} color={theme.colors.white} />
-      </TouchableOpacity>
 
       {/* ZOOM CONTROLS */}
       <View style={styles.zoomControls}>
@@ -677,6 +693,7 @@ const BoardScreen: FC = () => {
           <Ionicons name="add" size={20} color={zoom >= 3 ? theme.colors.textLight : theme.colors.textPrimary} />
         </TouchableOpacity>
       </View>
+
 
       {/* BOTTOM BAR */}
       <View style={styles.bottomBar}>
@@ -809,6 +826,7 @@ const BoardScreen: FC = () => {
         </KeyboardAvoidingView>
       </Modal>
 
+
       {/* HELP MODAL */}
       <Modal
         visible={helpModalVisible}
@@ -871,66 +889,68 @@ const BoardScreen: FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.light },
   header: {
-  flexDirection: "row",
-  alignItems: "center",
-  paddingTop: 50,
-  paddingHorizontal: 16,
-  paddingBottom: 12,
-  backgroundColor: theme.colors.white,
-  zIndex: 10000,
-  elevation: 12,
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  justifyContent: "space-between",
-},
-
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 50,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: theme.colors.white,
+    zIndex: 10000,
+    elevation: 12,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    justifyContent: "space-between",
+  },
   leftHeaderContainer: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
   },
-  rightHeaderContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 8,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  backButtonIcon: {
+  helpButtonHeader: {
+    position: "absolute",
+    left: 100,
+    top: 50,
+    bottom: 12,
     width: 40,
     height: 40,
-    resizeMode: "contain",
+    borderRadius: 20,
+    backgroundColor: theme.colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+    ...theme.shadows.md,
+    zIndex: 1,
   },
   headerTitleContainer: {
-    flexDirection: "row",
+    position: "absolute",
+    left: 150,
+    right: 150,
+    top: 50,
+    bottom: 12,
     alignItems: "center",
-    flex: 1,
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+    ...theme.shadows.md,
+  },
+  backButtonIcon: {
+    width: 36,
+    height: 36,
+    resizeMode: "contain",
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "600",
     color: theme.colors.textPrimary,
     flexShrink: 1,
-  },
-  helpButtonFloating: {
-    position: 'absolute',
-    bottom: 120,
-    left: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
-    ...theme.shadows.lg,
+    maxWidth: 200,
   },
   canvasContainer: { width: BOARD_WIDTH, height: BOARD_HEIGHT},
   gridContainer: { ...StyleSheet.absoluteFillObject },
@@ -962,6 +982,11 @@ const styles = StyleSheet.create({
     color: "#777",
     marginTop: 4,
   },
+  rightButtonsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   undoRedoContainer: {
     flexDirection: "row",
     gap: 6,
@@ -969,10 +994,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   undoRedoButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     backgroundColor: theme.colors.white,
-    borderRadius: 22,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
     ...theme.shadows.md,
@@ -984,10 +1009,10 @@ const styles = StyleSheet.create({
     zIndex: 10001,
   },
   organizeButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     backgroundColor: theme.colors.white,
-    borderRadius: 22,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
     ...theme.shadows.md,
@@ -1152,6 +1177,37 @@ const styles = StyleSheet.create({
   zoomText: {
     fontSize: 13,
     fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  boardNameDropdownContainer: {
+    position: "relative",
+    zIndex: 1000,
+  },
+  boardNameDropdown: {
+    position: "absolute",
+    top: 30,
+    left: "50%",
+    marginLeft: -100,
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    padding: 12,
+    ...theme.shadows.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    zIndex: 1001,
+    minWidth: 200,
+    maxWidth: 300,
+  },
+  boardNameDropdownText: {
+    fontSize: 16,
+    fontWeight: "600",
     color: theme.colors.textPrimary,
   },
   helpModalOverlay: {
