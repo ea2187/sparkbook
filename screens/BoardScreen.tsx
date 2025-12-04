@@ -233,9 +233,19 @@ const BoardScreen: FC = () => {
 
   // Update spark position in database
   function handleSparkMove(id: string, newX: number, newY: number) {
+    // Validate coordinates
+    if (!isFinite(newX) || !isFinite(newY) || isNaN(newX) || isNaN(newY)) {
+      console.error("❌ Invalid spark position values:", { newX, newY });
+      return;
+    }
+
+    // Round to integers to avoid database errors
+    const roundedX = Math.round(newX);
+    const roundedY = Math.round(newY);
+
     // Update UI immediately
     setSparks((prev) => {
-      const updated = prev.map((s) => (s.id === id ? { ...s, x: newX, y: newY } : s));
+      const updated = prev.map((s) => (s.id === id ? { ...s, x: roundedX, y: roundedY } : s));
       // Add to history after move completes
       setTimeout(() => addToHistory(updated), 100);
       return updated;
@@ -244,11 +254,12 @@ const BoardScreen: FC = () => {
     // Update database in background
     supabase
       .from("sparks")
-      .update({ x: newX, y: newY })
+      .update({ x: roundedX, y: roundedY })
       .eq("id", id)
       .then(({ error }) => {
         if (error) {
           console.error("❌ Failed to update spark position:", error);
+          console.error("Attempted values:", { x: roundedX, y: roundedY, id });
         }
       });
   }

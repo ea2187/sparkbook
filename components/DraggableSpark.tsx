@@ -525,18 +525,20 @@ export default function DraggableSpark({
           </Animated.View>
           {selected && (
             <>
-              {/* Crop toggle button */}
-              <TouchableOpacity
-                style={[styles.cropButton, { top: -8, left: size.width / 2 - 18 }]}
-                onPress={() => setCropMode(!cropMode)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name="expand-outline"
-                  size={20}
-                  color={cropMode ? "#10B981" : "#3A7AFE"}
-                />
-              </TouchableOpacity>
+              {/* Crop toggle button - only show when not in crop mode */}
+              {!cropMode && (
+                <TouchableOpacity
+                  style={[styles.cropButton, { bottom: -8, left: -8 }]}
+                  onPress={() => setCropMode(!cropMode)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="expand-outline"
+                    size={20}
+                    color="#3A7AFE"
+                  />
+                </TouchableOpacity>
+              )}
 
               {/* Delete button */}
               {onDelete && (
