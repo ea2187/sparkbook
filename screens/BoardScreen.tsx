@@ -68,6 +68,9 @@ const BoardScreen: FC = () => {
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [helpModalVisible, setHelpModalVisible] = useState(false);
   const [boardNameModalVisible, setBoardNameModalVisible] = useState(false);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [shareCaption, setShareCaption] = useState("");
+  const [sharingBoard, setSharingBoard] = useState(false);
   
   // Undo/Redo state
   const [history, setHistory] = useState<any[][]>([]);
@@ -339,6 +342,103 @@ const BoardScreen: FC = () => {
       "This feature will export your board as an image. Coming soon!",
       [{ text: "OK" }]
     );
+  }
+
+  // Handle share to community
+  function handleShareToCommunity() {
+    setShareModalVisible(true);
+  }
+
+  async function handleShareBoard() {
+    if (!boardId) return;
+
+    setSharingBoard(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in to share');
+        return;
+      }
+
+      // Create community post
+      const { data: post, error: postError } = await supabase
+        .from('community_posts')
+        .insert({
+          user_id: user.id,
+          type: 'sparklette',
+          caption: shareCaption.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (postError) throw postError;
+
+      // Add sparks as attachments
+      const attachments = sparks.slice(0, 10).map(spark => {
+        const attachment: any = {
+          post_id: post.id,
+          spark_id: spark.id,
+          media_type: spark.type,
+        };
+
+        if (spark.type === 'image') {
+          attachment.image_url = spark.content_url;
+          attachment.title = spark.name || null;
+          attachment.media_type = 'image';
+        } else if (spark.type === 'audio') {
+          // Parse music metadata
+          try {
+            if (spark.text_content && spark.text_content.startsWith('{')) {
+              const metadata = JSON.parse(spark.text_content);
+              attachment.media_type = 'music';
+              attachment.title = spark.title || spark.name; // Use spark.title (track name)
+              attachment.subtitle = metadata.artists || metadata.artistName; // artists from metadata
+              attachment.image_url = metadata.albumImage || metadata.albumArt; // albumImage from metadata
+              attachment.spotify_url = metadata.spotifyUrl || spark.content_url;
+            } else {
+              // Voice recording
+              attachment.media_type = 'spark';
+              attachment.title = spark.name || 'Voice Recording';
+              attachment.subtitle = 'Audio recording';
+              attachment.audio_url = spark.content_url;
+            }
+          } catch (e) {
+            console.error('Error parsing audio metadata:', e);
+          }
+        } else if (spark.type === 'note') {
+          attachment.media_type = 'note';
+          attachment.title = spark.title || 'Untitled Note';
+          attachment.subtitle = spark.text_content;
+        } else if (spark.type === 'file') {
+          attachment.media_type = 'file';
+          attachment.title = spark.name || 'File';
+          attachment.subtitle = 'Document';
+          attachment.image_url = spark.content_url;
+        }
+
+        return attachment;
+      });
+
+      if (attachments.length > 0) {
+        const { error: attachError } = await supabase
+          .from('community_attachments')
+          .insert(attachments);
+
+        if (attachError) throw attachError;
+      }
+
+      Alert.alert('Success', 'Board shared to community!', [
+        { text: 'OK', onPress: () => {
+          setShareModalVisible(false);
+          setShareCaption('');
+        }}
+      ]);
+    } catch (error) {
+      console.error('Error sharing board:', error);
+      Alert.alert('Error', 'Failed to share board');
+    } finally {
+      setSharingBoard(false);
+    }
   }
 
   // Handle rename board
@@ -790,6 +890,7 @@ const BoardScreen: FC = () => {
         onToggleGrid={handleToggleGrid}
         onExportAsImage={handleExportAsImage}
         onRenameBoard={handleRenameBoard}
+        onShareToCommunity={handleShareToCommunity}
         gridVisible={gridVisible}
       />
 
@@ -901,6 +1002,68 @@ const BoardScreen: FC = () => {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* SHARE TO COMMUNITY MODAL */}
+      <Modal
+        visible={shareModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShareModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={() => setShareModalVisible(false)}>
+            <View style={styles.shareModalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.shareModalContent}>
+                  <View style={styles.shareModalHeader}>
+                    <Ionicons name="share-social" size={32} color={theme.colors.primary} />
+                    <Text style={styles.shareModalTitle}>Share to Community</Text>
+                  </View>
+
+                  <Text style={styles.shareModalSubtext}>
+                    Share this board with the Sparkbook community. Up to 10 sparks will be shared.
+                  </Text>
+
+                  <TextInput
+                    style={styles.shareCaptionInput}
+                    placeholder="Add a caption (optional)"
+                    placeholderTextColor={theme.colors.textLight}
+                    value={shareCaption}
+                    onChangeText={setShareCaption}
+                    multiline
+                    maxLength={280}
+                    editable={!sharingBoard}
+                  />
+
+                  <View style={styles.shareModalButtons}>
+                    <TouchableOpacity
+                      style={[styles.shareModalButton, styles.shareModalButtonCancel]}
+                      onPress={() => setShareModalVisible(false)}
+                      disabled={sharingBoard}
+                    >
+                      <Text style={styles.shareModalButtonCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.shareModalButton, styles.shareModalButtonShare, sharingBoard && styles.shareModalButtonDisabled]}
+                      onPress={handleShareBoard}
+                      disabled={sharingBoard}
+                    >
+                      {sharingBoard ? (
+                        <ActivityIndicator size="small" color={theme.colors.white} />
+                      ) : (
+                        <Text style={styles.shareModalButtonShareText}>Share</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
     </View>
@@ -1288,6 +1451,82 @@ const styles = StyleSheet.create({
     ...theme.shadows.md,
   },
   helpModalButtonText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.white,
+  },
+  shareModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  shareModalContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    ...theme.shadows.lg,
+  },
+  shareModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  shareModalTitle: {
+    fontSize: 22,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+    flex: 1,
+  },
+  shareModalSubtext: {
+    fontSize: 14,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    marginBottom: 16,
+  },
+  shareCaptionInput: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 20,
+  },
+  shareModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  shareModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareModalButtonCancel: {
+    backgroundColor: theme.colors.light,
+  },
+  shareModalButtonCancelText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+  },
+  shareModalButtonShare: {
+    backgroundColor: theme.colors.primary,
+    ...theme.shadows.md,
+  },
+  shareModalButtonDisabled: {
+    opacity: 0.6,
+  },
+  shareModalButtonShareText: {
     fontSize: 16,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.white,

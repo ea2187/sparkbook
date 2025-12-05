@@ -18,6 +18,7 @@ interface MoreMenuProps {
   onToggleGrid: () => void;
   onExportAsImage: () => void;
   onRenameBoard: () => void;
+  onShareToCommunity: () => void;
   gridVisible: boolean;
 }
 
@@ -28,6 +29,7 @@ const MoreMenu: FC<MoreMenuProps> = ({
   onToggleGrid,
   onExportAsImage,
   onRenameBoard,
+  onShareToCommunity,
   gridVisible,
 }) => {
   const handleAction = (action: () => void) => {
@@ -133,6 +135,31 @@ const MoreMenu: FC<MoreMenuProps> = ({
                   <Text style={styles.menuItemText}>
                     {gridVisible ? "Hide Grid" : "Show Grid"}
                   </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={theme.colors.textLight}
+                  />
+                </TouchableOpacity>
+
+                {/* Share to Community */}
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => handleAction(onShareToCommunity)}
+                >
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      { backgroundColor: "#E8F0FF" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="share-social"
+                      size={28}
+                      color={theme.colors.primary}
+                    />
+                  </View>
+                  <Text style={styles.menuItemText}>Share to Community</Text>
                   <Ionicons
                     name="chevron-forward"
                     size={20}

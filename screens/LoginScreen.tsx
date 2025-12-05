@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import theme from '../styles/theme';
@@ -21,6 +22,7 @@ const LoginScreen: FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('dev@sparkbook.test');
   const [password, setPassword] = useState('password');
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -48,6 +50,69 @@ const LoginScreen: FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  const handleSignUp = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const username = email.split('@')[0];
+      
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+        options: {
+          data: {
+            full_name: username,
+          }
+        }
+      });
+
+      if (error) {
+        console.error('Sign up error details:', JSON.stringify(error, null, 2));
+        Alert.alert('Sign Up Failed', error.message + '\n\nCheck console for details');
+      } else if (data.user) {
+        // Try to create profile entry (in case trigger doesn't exist)
+        try {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: data.user.id,
+              full_name: username,
+            }, {
+              onConflict: 'id'
+            });
+
+          if (profileError) {
+            console.error('Profile creation error details:', JSON.stringify(profileError, null, 2));
+            Alert.alert('Profile Error', 'User created but profile failed: ' + profileError.message);
+          } else {
+            Alert.alert(
+              'Success',
+              'Account created successfully! You can now sign in.',
+              [{ text: 'OK', onPress: () => setIsSignUp(false) }]
+            );
+          }
+        } catch (profileErr) {
+          console.error('Profile creation exception:', profileErr);
+          Alert.alert('Profile Error', 'User created but profile failed. Check console.');
+        }
+      }
+    } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred');
+      console.error('Sign up error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -55,8 +120,14 @@ const LoginScreen: FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     >
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Welcome to Sparkbook</Text>
-          <Text style={styles.subtitle}>Sign in to continue</Text>
+          <Image
+            source={require('../assets/SparkBookLogo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.subtitle}>
+            {isSignUp ? 'Create your account' : 'Sign in to continue'}
+          </Text>
         </View>
 
         <View style={styles.form}>
@@ -93,15 +164,28 @@ const LoginScreen: FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
+            onPress={isSignUp ? handleSignUp : handleLogin}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color={theme.colors.white} />
             ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
+              <Text style={styles.buttonText}>
+                {isSignUp ? 'Create Account' : 'Sign In'}
+              </Text>
             )}
           </TouchableOpacity>
+
+          <View style={styles.toggleContainer}>
+            <Text style={styles.toggleText}>
+              {isSignUp ? 'Already have an account?' : "Don't have an account?"}
+            </Text>
+            <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} disabled={loading}>
+              <Text style={styles.toggleButton}>
+                {isSignUp ? 'Sign In' : 'Sign Up'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -122,19 +206,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: theme.spacing.xxxl,
   },
+  logo: {
+    width: "80%",
+  },
   title: {
-    fontSize: theme.typography.fontSize.display,
+    fontSize: 32,
     fontFamily: theme.typography.fontFamily.bold,
     color: theme.colors.textPrimary,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: theme.typography.fontSize.lg,
+    fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textSecondary,
+    textAlign: 'center',
   },
   form: {
     width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   inputContainer: {
     marginBottom: theme.spacing.lg,
@@ -143,18 +234,22 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     fontFamily: theme.typography.fontFamily.medium,
     color: theme.colors.textPrimary,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
   },
   input: {
     ...theme.components.input,
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textPrimary,
+    fontSize: theme.typography.fontSize.base,
+    paddingVertical: 16,
   },
   button: {
     ...theme.components.button.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.xl,
+    paddingVertical: 16,
+    borderRadius: 12,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -163,6 +258,24 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.white,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: theme.spacing.xl,
+    gap: theme.spacing.xs,
+  },
+  toggleText: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+  },
+  toggleButton: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.bold,
+    color: theme.colors.primary,
+    textDecorationLine: 'underline',
   },
 });
 

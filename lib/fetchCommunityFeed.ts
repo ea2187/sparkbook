@@ -9,14 +9,15 @@ export type CommunityAttachment = {
   subtitle: string | null;
   image_url: string | null;
   spotify_url: string | null;
-  media_type: "image" | "music" | "spark" | "note" | null;
+  audio_url: string | null;
+  media_type: "image" | "music" | "spark" | "note" | "audio" | null;
   created_at: string;
 };
 
 export type CommunityPost = {
   id: string;
   user_id: string;
-  type: "image" | "music" | "sparklette" | "note";
+  type: "image" | "music" | "sparklette" | "note" | "audio";
   caption: string | null;
   created_at: string;
   attachments: CommunityAttachment[];
@@ -40,6 +41,7 @@ export async function fetchCommunityFeed(): Promise<CommunityPost[]> {
         subtitle,
         image_url,
         spotify_url,
+        audio_url,
         media_type,
         created_at
       )

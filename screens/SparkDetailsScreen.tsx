@@ -13,6 +13,7 @@ import {
   Platform,
   ScrollView,
   Linking,
+  Modal,
 } from "react-native";
 import { StackScreenProps } from "@react-navigation/stack";
 import { HomeStackParamList } from "../types";
@@ -41,6 +42,9 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [editedNoteTitle, setEditedNoteTitle] = useState("");
   const [editedNoteText, setEditedNoteText] = useState("");
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [shareCaption, setShareCaption] = useState("");
+  const [sharingPost, setSharingPost] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -73,7 +77,7 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
     }
 
     setSpark(data);
-    setEditedName(data.name || "");
+    setEditedName(data.title || "");
     setTempSize({ width: data.width || 160, height: data.height || 160 });
     setEditedNoteTitle(data.title || "");
     setEditedNoteText(data.text_content || "");
@@ -88,17 +92,18 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
     setSaving(true);
     const { error } = await supabase
       .from("sparks")
-      .update({ name: editedName })
+      .update({ title: editedName })
       .eq("id", sparkId);
 
     setSaving(false);
 
     if (error) {
+      console.error("Error renaming spark:", error);
       Alert.alert("Error", "Failed to rename spark");
       return;
     }
 
-    setSpark({ ...spark, name: editedName });
+    setSpark({ ...spark, title: editedName });
     setIsEditing(false);
   }
 
@@ -145,6 +150,124 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
         },
       ]
     );
+  }
+
+  async function handleShareToCommunity() {
+    setShareModalVisible(true);
+  }
+
+  async function handleShareSpark() {
+    if (!spark) return;
+
+    setSharingPost(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert("Error", "You must be logged in to share");
+        setSharingPost(false);
+        return;
+      }
+
+      // Determine post type based on spark type
+      let postType: 'image' | 'music' | 'note' | 'sparklette' = 'sparklette';
+      if (spark.type === 'image') postType = 'image';
+      else if (spark.type === 'audio') {
+        // Check if it's music or voice recording
+        try {
+          if (spark.text_content && spark.text_content.startsWith('{')) {
+            postType = 'music';
+          } else {
+            // Voice recordings will be type 'sparklette' but detected by audio_url
+            postType = 'sparklette';
+          }
+        } catch (e) {
+          console.error('Error parsing audio metadata:', e);
+          postType = 'sparklette';
+        }
+      } else if (spark.type === 'note') postType = 'note';
+
+      // Create community post
+      const { data: post, error: postError } = await supabase
+        .from('community_posts')
+        .insert({
+          user_id: user.id,
+          type: postType,
+          caption: shareCaption.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (postError || !post) {
+        console.error('Error creating post:', postError);
+        Alert.alert('Error', 'Failed to share to community');
+        setSharingPost(false);
+        return;
+      }
+
+      // Prepare attachment data based on spark type
+      let attachmentData: any = {
+        post_id: post.id,
+        spark_id: spark.id,
+        media_type: spark.type,
+      };
+
+      if (spark.type === 'image') {
+        attachmentData.image_url = spark.content_url;
+        attachmentData.title = spark.name || null;
+      } else if (spark.type === 'audio') {
+        // Check if it's music (has metadata in text_content)
+        try {
+          if (spark.text_content && spark.text_content.startsWith('{')) {
+            const metadata = JSON.parse(spark.text_content);
+            attachmentData.media_type = 'music';
+            attachmentData.title = spark.title || spark.name; // Use spark.title (track name)
+            attachmentData.subtitle = metadata.artists || metadata.artistName; // artists from metadata
+            attachmentData.image_url = metadata.albumImage || metadata.albumArt; // albumImage from metadata
+            attachmentData.spotify_url = metadata.spotifyUrl || spark.content_url;
+          } else {
+            // Voice recording
+            attachmentData.media_type = 'spark';
+            attachmentData.title = spark.name || 'Voice Recording';
+            attachmentData.subtitle = 'Audio recording';
+            attachmentData.audio_url = spark.content_url;
+          }
+        } catch (e) {
+          console.error('Error parsing audio metadata:', e);
+        }
+      } else if (spark.type === 'note') {
+        attachmentData.media_type = 'note';
+        attachmentData.title = spark.title || 'Untitled Note';
+        attachmentData.subtitle = spark.text_content;
+      } else if (spark.type === 'file') {
+        attachmentData.media_type = 'file';
+        attachmentData.title = spark.name || 'File';
+        attachmentData.subtitle = 'Document';
+        attachmentData.image_url = spark.content_url; // File URL for download
+      }
+
+      // Add spark as attachment
+      const { error: attachmentError } = await supabase
+        .from('community_attachments')
+        .insert(attachmentData);
+
+      if (attachmentError) {
+        console.error('Error adding attachment:', attachmentError);
+        // Delete the post if attachment fails
+        await supabase.from('community_posts').delete().eq('id', post.id);
+        Alert.alert('Error', 'Failed to attach spark to post');
+        setSharingPost(false);
+        return;
+      }
+
+      Alert.alert('Success', 'Spark shared to community!');
+      setShareModalVisible(false);
+      setShareCaption('');
+    } catch (error) {
+      console.error('Error sharing spark:', error);
+      Alert.alert('Error', 'Failed to share spark');
+    } finally {
+      setSharingPost(false);
+    }
   }
 
   async function handleDelete() {
@@ -287,18 +410,28 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
         >
           <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
+
         <Text style={styles.headerTitle}>Spark Details</Text>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={handleDeletePress}
-          disabled={deleting}
-        >
-          {deleting ? (
-            <ActivityIndicator size="small" color="#EF4444" />
-          ) : (
-            <Ionicons name="trash-outline" size={24} color="#EF4444" />
-          )}
-        </TouchableOpacity>
+        
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={handleShareToCommunity}
+          >
+            <Ionicons name="share-social-outline" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDeletePress}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <ActivityIndicator size="small" color="#EF4444" />
+            ) : (
+              <Ionicons name="trash-outline" size={24} color="#EF4444" />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -514,7 +647,7 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
                 style={[styles.editButton, styles.cancelButton]}
                 onPress={() => {
                   setIsEditing(false);
-                  setEditedName(spark.name || "");
+                  setEditedName(spark.title || "");
                 }}
                 disabled={saving}
               >
@@ -534,7 +667,7 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
             </View>
           </View>
         ) : (
-          <Text style={styles.nameText}>{spark.name || "Untitled"}</Text>
+          <Text style={styles.nameText}>{spark.title || "Untitled"}</Text>
         )}
       </View>
 
@@ -618,6 +751,57 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
         </View>
       </View>
       </ScrollView>
+
+      {/* Share to Community Modal */}
+      <Modal
+        visible={shareModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShareModalVisible(false)}
+      >
+        <View style={styles.shareModalOverlay}>
+          <TouchableOpacity
+            style={styles.shareModalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShareModalVisible(false)}
+          />
+          <View style={styles.shareModalContent}>
+            <Text style={styles.shareModalTitle}>Share to Community</Text>
+            <TextInput
+              style={styles.shareModalInput}
+              value={shareCaption}
+              onChangeText={setShareCaption}
+              placeholder="Add a caption (optional)..."
+              placeholderTextColor={theme.colors.textLight}
+              multiline
+              maxLength={500}
+            />
+            <View style={styles.shareModalButtons}>
+              <TouchableOpacity
+                style={[styles.shareModalButton, styles.cancelShareButton]}
+                onPress={() => {
+                  setShareModalVisible(false);
+                  setShareCaption('');
+                }}
+                disabled={sharingPost}
+              >
+                <Text style={styles.cancelShareButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.shareModalButton, styles.confirmShareButton]}
+                onPress={handleShareSpark}
+                disabled={sharingPost}
+              >
+                {sharingPost ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmShareButtonText}>Share</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -1031,6 +1215,78 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
   },
   applyButtonText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.white,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  shareButton: {
+    padding: 8,
+  },
+  shareModalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  shareModalBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  shareModalContent: {
+    width: "85%",
+    backgroundColor: theme.colors.white,
+    borderRadius: 16,
+    padding: 24,
+    ...theme.shadows.lg,
+  },
+  shareModalTitle: {
+    fontSize: 20,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  shareModalInput: {
+    backgroundColor: theme.colors.light,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+    minHeight: 100,
+    textAlignVertical: "top",
+    marginBottom: 20,
+  },
+  shareModalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  shareModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  cancelShareButton: {
+    backgroundColor: theme.colors.light,
+  },
+  cancelShareButtonText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+  },
+  confirmShareButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  confirmShareButtonText: {
     fontSize: 16,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.white,
