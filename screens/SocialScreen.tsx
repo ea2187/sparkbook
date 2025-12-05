@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useState } from 'react';
+import React, { FC, useEffect, useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -20,6 +20,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import theme from '../styles/theme';
 import { fetchCommunityFeed, CommunityPost } from '../lib/fetchCommunityFeed';
 import { COMMUNITY_USER_LOOKUP } from '../lib/communityUsers';
@@ -43,14 +44,94 @@ const SocialScreen: FC = () => {
   const [selectedBoardIds, setSelectedBoardIds] = useState<Set<string>>(new Set());
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [addedBoardNames, setAddedBoardNames] = useState<string[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [playingAudio, setPlayingAudio] = useState<{ [key: string]: { sound: Audio.Sound; isPlaying: boolean; position: number; duration: number } }>({});
+  const [loadingAudio, setLoadingAudio] = useState<{ [key: string]: boolean }>({});
+  const soundRefs = useRef<{ [key: string]: Audio.Sound }>({});
 
   useEffect(() => {
     loadFeed();
+    getCurrentUser();
   }, []);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(soundRefs.current).forEach(async (sound) => {
+        try {
+          await sound.unloadAsync();
+        } catch (error) {
+          console.error('Error unloading audio:', error);
+        }
+      });
+    };
+  }, []);
+
+  async function getCurrentUser() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      setCurrentUserId(user.id);
+    }
+  }
+
+  async function handleDeletePost(postId: string) {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Delete attachments first
+              const { error: attachError } = await supabase
+                .from('community_attachments')
+                .delete()
+                .eq('post_id', postId);
+
+              if (attachError) throw attachError;
+
+              // Delete the post
+              const { error: postError } = await supabase
+                .from('community_posts')
+                .delete()
+                .eq('id', postId);
+
+              if (postError) throw postError;
+
+              // Update UI
+              setPosts(prev => prev.filter(p => p.id !== postId));
+              Alert.alert('Success', 'Post deleted successfully');
+            } catch (error) {
+              console.error('Error deleting post:', error);
+              Alert.alert('Error', 'Failed to delete post');
+            }
+          },
+        },
+      ]
+    );
+  }
 
   async function loadFeed() {
     setLoading(true);
     const data = await fetchCommunityFeed();
+    console.log('Community feed loaded:', data.length, 'posts');
+    // Log any posts with audio_url
+    data.forEach(post => {
+      if (post.attachments.some(a => a.audio_url)) {
+        console.log('Post with audio:', { 
+          postId: post.id, 
+          type: post.type,
+          attachments: post.attachments.map(a => ({ 
+            id: a.id, 
+            audio_url: a.audio_url,
+            media_type: a.media_type 
+          }))
+        });
+      }
+    });
     setPosts(data);
     
     // Fetch user info for all unique user IDs
@@ -111,22 +192,63 @@ const SocialScreen: FC = () => {
 
     // Try to fetch from profiles table if not in lookup
     try {
-      const { data: profile, error } = await supabase
+      let { data: profile, error } = await supabase
         .from('profiles')
-        .select('username, first_name, last_name, profile_picture')
+        .select('username, full_name, profile_picture')
         .eq('id', userId)
         .single();
 
+      console.log('Fetching user profile:', { userId, profile, error });
+
+      // If profile doesn't exist, try to get user info from auth and create profile
+      if (error && error.code === '42703') {
+        // Column doesn't exist - check if username column exists
+        const { data: profileAlt, error: errorAlt } = await supabase
+          .from('profiles')
+          .select('full_name, profile_picture')
+          .eq('id', userId)
+          .single();
+        
+        if (!errorAlt && profileAlt) {
+          profile = profileAlt;
+          error = null;
+        }
+      }
+
+      if (error && error.code === 'PGRST116') {
+        // Profile doesn't exist - try to get from auth and create it
+        console.log('Profile does not exist, fetching from auth...');
+        const { data: { user: authUser } } = await supabase.auth.admin.getUserById(userId);
+        
+        if (authUser && authUser.user_metadata) {
+          const metadata = authUser.user_metadata;
+          const fullName = metadata.full_name || metadata.firstName || metadata.first_name || '';
+          
+          // Try to create the profile
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: userId,
+              full_name: fullName,
+              created_at: new Date().toISOString()
+            })
+            .select('full_name, profile_picture')
+            .single();
+          
+          if (!createError && newProfile) {
+            profile = newProfile;
+            error = null;
+          }
+        }
+      }
+
       if (!error && profile) {
-        const firstName = profile.first_name || '';
-        const lastName = profile.last_name || '';
+        const fullName = profile.full_name || '';
         const username = profile.username || '';
         
-        // Always prioritize username if available
-        let name = username;
-        if (!name && (firstName || lastName)) {
-          name = `${firstName} ${lastName}`.trim();
-        }
+        // Always prioritize full_name if available, then username
+        let name = fullName || username;
+        
         // Replace "Jonathan" with "jontheartist" if it appears
         if (name === "Jonathan") {
           name = "jontheartist";
@@ -136,8 +258,8 @@ const SocialScreen: FC = () => {
         }
 
         let initial = '?';
-        if (firstName) {
-          initial = firstName.charAt(0).toUpperCase();
+        if (fullName) {
+          initial = fullName.charAt(0).toUpperCase();
         } else if (username) {
           initial = username.charAt(0).toUpperCase();
         }
@@ -442,6 +564,11 @@ const SocialScreen: FC = () => {
   }
 
   function renderPostCard(post: CommunityPost) {
+    // Check if it's a single spark with audio_url (voice recording) FIRST
+    if (post.attachments.length === 1 && post.attachments[0].audio_url) {
+      return renderAudioCard(post);
+    }
+
     switch (post.type) {
       case 'music':
         return renderMusicCard(post);
@@ -451,6 +578,8 @@ const SocialScreen: FC = () => {
         return renderImageCard(post);
       case 'note':
         return renderNoteCard(post);
+      case 'audio':
+        return renderAudioCard(post);
       default:
         return null;
     }
@@ -651,8 +780,226 @@ const SocialScreen: FC = () => {
     );
   }
 
+  async function handleAudioPlayback(postId: string, audioUrl: string) {
+    try {
+      console.log('handleAudioPlayback called:', { postId, audioUrl });
+      
+      // If loading, prevent multiple clicks
+      if (loadingAudio[postId]) {
+        console.log('Already loading, ignoring click');
+        return;
+      }
+
+      const existingSound = soundRefs.current[postId];
+
+      // If this audio is already loaded, toggle play/pause
+      if (existingSound) {
+        const status = await existingSound.getStatusAsync();
+        if (status.isLoaded) {
+          if (status.isPlaying) {
+            console.log('Pausing audio');
+            await existingSound.pauseAsync();
+            setPlayingAudio(prev => ({
+              ...prev,
+              [postId]: { ...prev[postId], isPlaying: false }
+            }));
+          } else {
+            console.log('Resuming audio');
+            await existingSound.playAsync();
+            setPlayingAudio(prev => ({
+              ...prev,
+              [postId]: { ...prev[postId], isPlaying: true }
+            }));
+          }
+          return;
+        }
+      }
+
+      console.log('Loading new audio...');
+
+      // Show loading state
+      setLoadingAudio(prev => ({ ...prev, [postId]: true }));
+
+      // Stop any other playing audio
+      for (const [id, otherSound] of Object.entries(soundRefs.current)) {
+        if (id !== postId) {
+          const status = await otherSound.getStatusAsync();
+          if (status.isLoaded && status.isPlaying) {
+            await otherSound.pauseAsync();
+          }
+        }
+      }
+
+      // Set audio mode for playback
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+
+      // Load and play new audio
+      console.log('Creating audio sound with URI:', audioUrl);
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true }
+      );
+
+      console.log('Sound created, getting initial status...');
+      const initialStatus = await sound.getStatusAsync();
+      console.log('Initial status:', initialStatus);
+
+      if (!initialStatus.isLoaded) {
+        throw new Error('Sound failed to load');
+      }
+
+      // Store the sound in ref
+      soundRefs.current[postId] = sound;
+
+      // Store the sound object in state for UI
+      setPlayingAudio(prev => ({
+        ...prev,
+        [postId]: { 
+          sound, 
+          isPlaying: initialStatus.isPlaying,
+          position: 0,
+          duration: initialStatus.durationMillis || 0
+        }
+      }));
+
+      // Then set up the playback status callback
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded) {
+          if (status.didJustFinish) {
+            console.log('Audio finished playing');
+            // Reset to play icon when finished
+            setPlayingAudio(prev => {
+              if (!prev[postId]?.sound) return prev;
+              return {
+                ...prev,
+                [postId]: { ...prev[postId], isPlaying: false, position: 0 }
+              };
+            });
+          } else {
+            // Update playback state
+            setPlayingAudio(prev => {
+              if (!prev[postId]?.sound) return prev;
+              return {
+                ...prev,
+                [postId]: {
+                  ...prev[postId],
+                  isPlaying: status.isPlaying,
+                  position: status.positionMillis || 0,
+                  duration: status.durationMillis || 0
+                }
+              };
+            });
+          }
+        }
+      });
+
+      console.log('Audio setup complete');
+
+      // Clear loading state
+      setLoadingAudio(prev => ({ ...prev, [postId]: false }));
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      setLoadingAudio(prev => ({ ...prev, [postId]: false }));
+      Alert.alert('Playback Error', 'Unable to play this audio recording. Please try again.');
+    }
+  }
+
+  function formatTime(milliseconds: number): string {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  function renderAudioCard(post: CommunityPost) {
+    const attachment = post.attachments[0];
+    const audioState = playingAudio[post.id];
+    const isPlaying = audioState?.isPlaying || false;
+    const isLoading = loadingAudio[post.id] || false;
+    const position = audioState?.position || 0;
+    const duration = audioState?.duration || 0;
+    const progress = duration > 0 ? position / duration : 0;
+
+    console.log('Rendering audio card:', { postId: post.id, audioUrl: attachment?.audio_url, isPlaying, isLoading });
+
+    return (
+      <View style={styles.card}>
+        <TouchableOpacity 
+          style={styles.audioContentMain}
+          onPress={() => {
+            console.log('Audio card pressed:', attachment?.audio_url);
+            if (attachment?.audio_url && !isLoading) {
+              handleAudioPlayback(post.id, attachment.audio_url);
+            }
+          }}
+          activeOpacity={0.7}
+          disabled={isLoading}
+        >
+          <View style={[styles.audioIconContainerLarge, isPlaying && styles.audioIconPlaying]}>
+            {isLoading ? (
+              <ActivityIndicator size="large" color={theme.colors.white} />
+            ) : (
+              <Ionicons 
+                name={isPlaying ? "pause" : "play"} 
+                size={48} 
+                color={theme.colors.white} 
+              />
+            )}
+          </View>
+          <View style={styles.audioInfoMain}>
+            <Ionicons name="mic" size={24} color={theme.colors.primary} style={{ marginBottom: 8 }} />
+            {attachment?.title && (
+              <Text style={styles.audioTitle} numberOfLines={2}>
+                {attachment.title}
+              </Text>
+            )}
+            <Text style={styles.audioSubtitle}>
+              {attachment?.subtitle || 'Audio recording'}
+            </Text>
+            {duration > 0 && (
+              <Text style={styles.audioTime}>
+                {formatTime(position)} / {formatTime(duration)}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+        {duration > 0 && (
+          <View style={styles.audioProgressContainer}>
+            <View style={styles.audioProgressBar}>
+              <View style={[styles.audioProgressFill, { width: `${progress * 100}%` }]} />
+            </View>
+          </View>
+        )}
+        {post.caption && (
+          <Text style={styles.imageCaption}>{post.caption}</Text>
+        )}
+        <TouchableOpacity 
+          style={styles.starButton}
+          onPress={() => toggleSavePost(post.id)}
+          activeOpacity={0.7}
+        >
+          <Ionicons 
+            name={isPostSaved(post.id) ? "star" : "star-outline"} 
+            size={20} 
+            color={theme.colors.secondary} 
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   function getPostDescription(post: CommunityPost) {
     const userInfo = getUserInfo(post.user_id);
+    
+    // Check if it's audio first (single attachment with audio_url)
+    if (post.attachments.length === 1 && post.attachments[0].audio_url) {
+      return `${userInfo.name} shared an audio recording`;
+    }
     
     switch (post.type) {
       case 'music':
@@ -664,6 +1011,8 @@ const SocialScreen: FC = () => {
         return `${userInfo.name} shared a photo`;
       case 'note':
         return `${userInfo.name} shared a note`;
+      case 'audio':
+        return `${userInfo.name} shared an audio recording`;
       default:
         return `${userInfo.name} shared something`;
     }
@@ -772,6 +1121,14 @@ const SocialScreen: FC = () => {
                     })}
                   </Text>
                 </View>
+                {currentUserId === post.user_id && (
+                  <TouchableOpacity
+                    style={styles.deletePostButton}
+                    onPress={() => handleDeletePost(post.id)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                  </TouchableOpacity>
+                )}
               </View>
               
               {renderPostCard(post)}
@@ -1058,6 +1415,10 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textLight,
   },
+  deletePostButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
   card: {
     backgroundColor: theme.colors.white,
     borderRadius: theme.borderRadius.xl,
@@ -1090,6 +1451,78 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textSecondary,
+  },
+  audioContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
+  },
+  audioContentMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.lg,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.backgroundSecondary,
+    borderRadius: theme.borderRadius.lg,
+    marginBottom: theme.spacing.sm,
+  },
+  audioIconContainer: {
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.light,
+    borderRadius: theme.borderRadius.md,
+  },
+  audioIconContainerLarge: {
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 40,
+  },
+  audioIconPlaying: {
+    backgroundColor: theme.colors.secondary,
+  },
+  audioInfoMain: {
+    flex: 1,
+  },
+  audioInfo: {
+    flex: 1,
+  },
+  audioTitle: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.xs,
+  },
+  audioSubtitle: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    marginBottom: 4,
+  },
+  audioTime: {
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textLight,
+  },
+  audioProgressContainer: {
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: 2,
+  },
+  audioProgressBar: {
+    height: 4,
+    backgroundColor: theme.colors.light,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  audioProgressFill: {
+    height: '100%',
+    backgroundColor: theme.colors.secondary,
+    borderRadius: 2,
   },
   sparkletteScroll: {
     marginBottom: theme.spacing.xs,
