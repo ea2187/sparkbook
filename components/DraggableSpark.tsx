@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
+import type { AVPlaybackStatus } from "expo-av";
 import theme from "../styles/theme";
 
 type DraggableSparkProps = {
@@ -117,7 +118,6 @@ export default function DraggableSpark({
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
@@ -132,6 +132,14 @@ export default function DraggableSpark({
     if (isDraggingRef.current) return;
     position.setValue({ x: spark.x, y: spark.y });
   }, [spark.x, spark.y]);
+
+  function handlePlaybackStatus(status: AVPlaybackStatus) {
+    if (!status.isLoaded) return;
+    setIsPlaying(status.isPlaying || false);
+    if (status.didJustFinish) {
+      setIsPlaying(false);
+    }
+  }
 
   async function toggleAudioPlayback() {
     if (!isAudio || !spark.content_url) return;
@@ -177,34 +185,43 @@ export default function DraggableSpark({
     try {
       if (sound) {
         const status = await sound.getStatusAsync();
-        if (status.isLoaded && status.isPlaying) {
-          await sound.pauseAsync();
-          setIsPlaying(false);
-        } else if (status.isLoaded) {
-          await sound.playAsync();
-          setIsPlaying(true);
-        }
-      } else {
-        // Load and play audio recording
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-        });
+        if (!status.isLoaded) return;
 
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: spark.content_url },
-          { shouldPlay: true },
-          (status) => {
-            if (status.isLoaded && status.didJustFinish) {
-              setIsPlaying(false);
-            }
-          }
-        );
-        
-        setSound(newSound);
+        if (status.isPlaying) {
+          // Stop and unload to ensure no restart
+          sound.setOnPlaybackStatusUpdate(null);
+          await sound.stopAsync();
+          await sound.unloadAsync();
+          setSound(null);
+          setIsPlaying(false);
+          return;
+        }
+
+        // Not playing: reset to start and play
+        sound.setOnPlaybackStatusUpdate(handlePlaybackStatus);
+        await sound.setPositionAsync(0);
+        await sound.playAsync();
         setIsPlaying(true);
+        return;
       }
+
+      // Load and play audio recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: spark.content_url },
+        { shouldPlay: false },
+        handlePlaybackStatus
+      );
+      
+      newSound.setOnPlaybackStatusUpdate(handlePlaybackStatus);
+      setSound(newSound);
+      await newSound.playAsync();
+      setIsPlaying(true);
     } catch (error) {
       console.error('Error playing audio:', error);
       if (sound) {
@@ -1018,7 +1035,7 @@ export default function DraggableSpark({
             </View>
           );
         } else {
-          // Voice recording - original style
+          // Voice recording - mini card with icon + text + active bar
           return (
             <View style={{ position: 'relative' }}>
               <View
@@ -1029,14 +1046,21 @@ export default function DraggableSpark({
                   isPlaying && styles.audioCardPlaying,
                 ]}
               >
-                <Ionicons 
-                  name={isPlaying ? "pause" : "mic"} 
-                  size={32} 
-                  color="#10B981" 
-                />
-                <Text style={styles.audioLabel} numberOfLines={1}>
-                  {spark.title || 'Audio'}
-                </Text>
+                <View style={styles.audioIconBubble}>
+                  <Ionicons 
+                    name={isPlaying ? "stop" : "play"} 
+                    size={22} 
+                    color={theme.colors.primary} 
+                  />
+                </View>
+                <View style={styles.audioTextContainer}>
+                  <Text style={styles.audioTitle} numberOfLines={1}>
+                    {spark.title || 'Audio recording'}
+                  </Text>
+                  <Text style={styles.audioSubtitle} numberOfLines={1}>
+                    {isPlaying ? 'Playing' : 'Tap to play'}
+                  </Text>
+                </View>
               </View>
               {selected && (
                 <>
@@ -1204,25 +1228,57 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   audioCard: {
-    borderRadius: 14,
-    backgroundColor: "#F0FDF4",
-    borderWidth: 2,
-    borderColor: "#10B981",
+    borderRadius: 12,
+    backgroundColor: "#F7F9FC",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    justifyContent: "flex-start",
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
   },
   audioCardPlaying: {
-    backgroundColor: "#D1FAE5",
+    backgroundColor: "#EAF1FF",
+    borderColor: theme.colors.primary,
   },
   selectedAudio: {
-    borderWidth: 3,
-    borderColor: "#3A7AFE",
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
   },
-  audioLabel: {
-    fontSize: 12,
+  audioIconBubble: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioTextContainer: {
+    flex: 1,
+    gap: 2,
+  },
+  audioTitle: {
+    fontSize: 14,
     fontWeight: "600",
-    color: "#10B981",
+    color: theme.colors.textPrimary,
+  },
+  audioSubtitle: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+  },
+  audioProgressBar: {
+    height: 3,
+    marginTop: 4,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  audioProgressFill: {
+    height: "100%",
+    width: "100%",
+    backgroundColor: theme.colors.primary,
   },
   musicContainer: {
     position: "relative",

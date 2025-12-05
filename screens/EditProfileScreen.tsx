@@ -51,12 +51,24 @@ const EditProfileScreen: FC = () => {
       // Try to get from profiles table first, fallback to auth metadata
       let profileData = null;
       try {
-        const { data } = await supabase
+        // First try: schema with full_name + username
+        let { data, error } = await supabase
           .from('profiles')
-          .select('username, first_name, last_name, profile_picture')
+          .select('username, full_name, profile_picture')
           .eq('id', user.id)
           .single();
-        profileData = data;
+        
+        // If column doesn't exist, try first_name/last_name schema
+        if (error && error.code === '42703') {
+          const { data: fallbackData } = await supabase
+            .from('profiles')
+            .select('username, first_name, last_name, profile_picture')
+            .eq('id', user.id)
+            .single();
+          profileData = fallbackData;
+        } else {
+          profileData = data;
+        }
       } catch (profileError) {
         // Profiles table might not exist, use auth metadata
         console.log('Using auth metadata for profile');
@@ -64,12 +76,30 @@ const EditProfileScreen: FC = () => {
 
       // Get profile data from profiles table or user metadata
       const metadata = user.user_metadata || {};
-      setFirstName(profileData?.first_name || metadata.first_name || metadata.firstName || '');
-      setLastName(profileData?.last_name || metadata.last_name || metadata.lastName || '');
+      
+      // Handle both schema variations
+      let firstName = '';
+      let lastName = '';
+      if (profileData) {
+        if ((profileData as any).first_name) {
+          // first_name/last_name schema
+          firstName = (profileData as any).first_name || '';
+          lastName = (profileData as any).last_name || '';
+        } else if ((profileData as any).full_name) {
+          // full_name schema - split it
+          const fullName = (profileData as any).full_name || '';
+          const parts = fullName.trim().split(' ');
+          firstName = parts[0] || '';
+          lastName = parts.slice(1).join(' ') || '';
+        }
+      }
+      
+      setFirstName(firstName || metadata.first_name || metadata.firstName || '');
+      setLastName(lastName || metadata.last_name || metadata.lastName || '');
       const emailUsername = user.email?.split('@')[0] || '';
-      setUsername(profileData?.username || metadata.username || emailUsername);
-      setOriginalUsername(profileData?.username || metadata.username || emailUsername);
-      setProfilePictureUri(profileData?.profile_picture || metadata.profile_picture || metadata.profilePicture || null);
+      setUsername((profileData as any)?.username || metadata.username || emailUsername);
+      setOriginalUsername((profileData as any)?.username || metadata.username || emailUsername);
+      setProfilePictureUri((profileData as any)?.profile_picture || metadata.profile_picture || metadata.profilePicture || null);
     } catch (error) {
       console.error('Error loading profile:', error);
       Alert.alert('Error', 'Failed to load profile');
@@ -264,23 +294,44 @@ const EditProfileScreen: FC = () => {
       }
 
       // Update profiles table (if it exists)
+      // Try both schema variations to handle different table structures
       try {
-        const { error: profileError } = await supabase
+        // First try: schema with full_name + username
+        let { error: profileError } = await supabase
           .from('profiles')
           .upsert({
             id: user.id,
             username: username.trim(),
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
+            full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
             profile_picture: profilePictureUri,
-            updated_at: new Date().toISOString(),
           }, {
             onConflict: 'id'
           });
 
-        if (profileError) {
-          // If profiles table doesn't exist, that's okay - we'll just use auth metadata
+        // If that fails with column error, try first_name/last_name schema
+        if (profileError && profileError.code === '42703') {
+          console.log('Trying first_name/last_name schema');
+          const { error: fallbackError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: user.id,
+              username: username.trim(),
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              profile_picture: profilePictureUri,
+            }, {
+              onConflict: 'id'
+            });
+          
+          if (fallbackError) {
+            console.log('Profiles table update failed:', fallbackError.message);
+          } else {
+            console.log('Profile picture saved to profiles table (first_name/last_name schema)');
+          }
+        } else if (profileError) {
           console.log('Profiles table update skipped:', profileError.message);
+        } else {
+          console.log('Profile picture saved to profiles table (full_name schema)');
         }
       } catch (profileTableError) {
         // Profiles table might not exist yet, that's okay

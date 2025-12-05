@@ -1,17 +1,23 @@
-import React, { FC, useEffect } from "react";
+import React, { FC, useRef } from "react";
 import { View, Text, StyleSheet, ActivityIndicator, Alert } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NavigationProp } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import theme from "../styles/theme";
 import type { HomeStackParamList } from "../types";
+import { useCallback } from "react";
 
 const PhotoPickerScreen: FC = () => {
   const navigation = useNavigation<NavigationProp<HomeStackParamList>>();
+  const hasShownAlert = useRef(false);
 
-  useEffect(() => {
-    handlePhotoButton();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      // Reset the flag when screen comes into focus
+      hasShownAlert.current = false;
+      handlePhotoButton();
+    }, [])
+  );
 
   async function requestPermissions() {
     const camera = await ImagePicker.requestCameraPermissionsAsync();
@@ -28,16 +34,42 @@ const PhotoPickerScreen: FC = () => {
   }
 
   async function handlePhotoButton() {
+    // Prevent multiple alerts from showing
+    if (hasShownAlert.current) {
+      return;
+    }
+    hasShownAlert.current = true;
+
     const ok = await requestPermissions();
     if (!ok) {
+      hasShownAlert.current = false;
       navigation.goBack();
       return;
     }
 
     Alert.alert("Add Photo", "Choose an option", [
-      { text: "Camera", onPress: takePhoto },
-      { text: "Photo Library", onPress: pickImageFromLibrary },
-      { text: "Cancel", style: "cancel", onPress: () => navigation.goBack() },
+      { 
+        text: "Camera", 
+        onPress: () => {
+          hasShownAlert.current = false;
+          takePhoto();
+        }
+      },
+      { 
+        text: "Photo Library", 
+        onPress: () => {
+          hasShownAlert.current = false;
+          pickImageFromLibrary();
+        }
+      },
+      { 
+        text: "Cancel", 
+        style: "cancel", 
+        onPress: () => {
+          hasShownAlert.current = false;
+          navigation.goBack();
+        }
+      },
     ]);
   }
 
@@ -47,14 +79,16 @@ const PhotoPickerScreen: FC = () => {
         quality: 0.7,
       });
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         navigation.navigate("AddPhotoDetails", {
           imageUri: result.assets[0].uri,
         });
       } else {
+        // User canceled - navigate back
         navigation.goBack();
       }
     } catch (e) {
+      console.error("Error taking photo:", e);
       Alert.alert("Error", "Failed to open camera.");
       navigation.goBack();
     }
@@ -67,14 +101,16 @@ const PhotoPickerScreen: FC = () => {
         selectionLimit: 1,
       });
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         navigation.navigate("AddPhotoDetails", {
           imageUri: result.assets[0].uri,
         });
       } else {
+        // User canceled - navigate back
         navigation.goBack();
       }
     } catch (e) {
+      console.error("Error picking image:", e);
       Alert.alert("Error", "Failed to pick image.");
       navigation.goBack();
     }

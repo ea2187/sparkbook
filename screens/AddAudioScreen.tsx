@@ -304,7 +304,7 @@ const AddAudioScreen: FC = () => {
               style={styles.titleInput}
               value={title}
               onChangeText={setTitle}
-              placeholder="Name your audio recording"
+              placeholder="Enter audio name"
               placeholderTextColor="#999"
               maxLength={50}
             />

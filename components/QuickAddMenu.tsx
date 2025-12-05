@@ -225,7 +225,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 20,
     top: 16,
-    padding: 4,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
   },
   menuItems: {
     paddingTop: 8,
@@ -235,6 +239,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 16,
     paddingHorizontal: 20,
+    minHeight: 44,
     gap: 16,
   },
   iconContainer: {

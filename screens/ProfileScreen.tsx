@@ -10,6 +10,8 @@ import {
   Linking,
   Alert,
   RefreshControl,
+  Modal,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -28,6 +30,9 @@ const ProfileScreen: FC = () => {
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -119,6 +124,62 @@ const ProfileScreen: FC = () => {
     await loadUserPosts();
   }
 
+  function handleMenuPress(postId: string) {
+    setSelectedPostId(postId);
+    setShowMenu(true);
+  }
+
+  function handleCloseMenu() {
+    setShowMenu(false);
+    setSelectedPostId(null);
+  }
+
+  async function handleUnshare() {
+    if (!selectedPostId) return;
+
+    Alert.alert(
+      'Unshare Post',
+      'Are you sure you want to unshare this post? It will be removed from the community feed.',
+      [
+        { text: 'Cancel', style: 'cancel', onPress: handleCloseMenu },
+        {
+          text: 'Unshare',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              // Delete attachments first
+              const { error: attachError } = await supabase
+                .from('community_attachments')
+                .delete()
+                .eq('post_id', selectedPostId);
+
+              if (attachError) throw attachError;
+
+              // Delete the post
+              const { error: postError } = await supabase
+                .from('community_posts')
+                .delete()
+                .eq('id', selectedPostId);
+
+              if (postError) throw postError;
+
+              // Update UI
+              setPosts(prev => prev.filter(p => p.id !== selectedPostId));
+              handleCloseMenu();
+              Alert.alert('Success', 'Post unshared successfully');
+            } catch (error) {
+              console.error('Error unsharing post:', error);
+              Alert.alert('Error', 'Failed to unshare post');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
     const month = date.toLocaleDateString('en-US', { month: '2-digit' });
@@ -164,20 +225,22 @@ const ProfileScreen: FC = () => {
 
     return (
       <View style={styles.cardContent}>
-        {attachment.image_url && (
-          <TouchableOpacity onPress={handleMusicPress} activeOpacity={0.7}>
-            <Image source={{ uri: attachment.image_url }} style={styles.albumArt} />
-          </TouchableOpacity>
-        )}
-        <View style={styles.musicInfo}>
-          <Text style={styles.trackTitle} numberOfLines={2}>
-            {attachment.title || 'Unknown Track'}
-          </Text>
-          {attachment.subtitle && (
-            <Text style={styles.artistName} numberOfLines={1}>
-              {attachment.subtitle}
-            </Text>
+        <View style={styles.musicContent}>
+          {attachment.image_url && (
+            <TouchableOpacity onPress={handleMusicPress} activeOpacity={0.7}>
+              <Image source={{ uri: attachment.image_url }} style={styles.albumArt} />
+            </TouchableOpacity>
           )}
+          <View style={styles.musicInfo}>
+            <Text style={styles.trackTitle} numberOfLines={2}>
+              {attachment.title || 'Unknown Track'}
+            </Text>
+            {attachment.subtitle && (
+              <Text style={styles.artistName} numberOfLines={1}>
+                {attachment.subtitle}
+              </Text>
+            )}
+          </View>
         </View>
       </View>
     );
@@ -347,20 +410,17 @@ const ProfileScreen: FC = () => {
             </View>
           ) : (
             posts.map((post) => {
-              const title = post.attachments[0]?.title || 
-                           (post.type === 'sparklette' ? 'Untitled Sparklette' :
-                            post.type === 'image' ? 'Image' :
-                            post.type === 'music' ? 'Music' : 'Note');
-
               return (
                 <View key={post.id} style={styles.postCard}>
                   {renderPostCard(post)}
                   <View style={styles.postCardFooter}>
                     <View style={styles.postCardInfo}>
-                      <Text style={styles.postCardTitle} numberOfLines={1}>{title}</Text>
                       <Text style={styles.postCardDate}>Posted {formatDate(post.created_at)}</Text>
                     </View>
-                    <TouchableOpacity style={styles.menuButton}>
+                    <TouchableOpacity 
+                      style={styles.menuButton}
+                      onPress={() => handleMenuPress(post.id)}
+                    >
                       <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
@@ -370,6 +430,46 @@ const ProfileScreen: FC = () => {
           )}
         </View>
       </ScrollView>
+
+      {/* Menu Modal */}
+      <Modal
+        visible={showMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseMenu}
+      >
+        <TouchableWithoutFeedback onPress={handleCloseMenu}>
+          <View style={styles.menuOverlay}>
+            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+              <View style={styles.menuContent}>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={handleUnshare}
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <ActivityIndicator size="small" color={theme.colors.error} />
+                  ) : (
+                    <>
+                      <Ionicons name="share-outline" size={20} color={theme.colors.error} />
+                      <Text style={[styles.menuItemText, { color: theme.colors.error }]}>
+                        Unshare
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={handleCloseMenu}
+                >
+                  <Text style={styles.menuItemText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 };
@@ -516,7 +616,11 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
   menuButton: {
-    padding: 4,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
   },
   emptyState: {
     alignItems: 'center',
@@ -542,14 +646,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   // Post content styles (reused from SocialScreen)
+  musicContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.lg,
+    paddingRight: theme.spacing.xl,
+  },
   albumArt: {
-    width: 200,
-    height: 200,
-    borderRadius: 12,
-    marginBottom: theme.spacing.sm,
+    width: 140,
+    height: 140,
+    borderRadius: theme.borderRadius.md,
   },
   musicInfo: {
-    marginTop: theme.spacing.sm,
+    flex: 1,
   },
   trackTitle: {
     fontSize: theme.typography.fontSize.lg,
@@ -613,6 +722,36 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textSecondary,
     lineHeight: 20,
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 16,
+    paddingVertical: 8,
+    minWidth: 200,
+    ...theme.shadows.lg,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  menuItemText: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textPrimary,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+    marginVertical: 4,
   },
 });
 

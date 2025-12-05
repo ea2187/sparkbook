@@ -459,7 +459,7 @@ const BoardScreen: FC = () => {
       .eq("id", boardId);
 
     if (error) {
-      Alert.alert("Error", "Failed to rename board");
+      Alert.alert("Error", "Failed to rename Sparklette");
       return;
     }
 
@@ -919,12 +919,12 @@ const BoardScreen: FC = () => {
               onPress={() => setRenameModalVisible(false)}
             />
             <View style={styles.renameModalContent}>
-              <Text style={styles.renameModalTitle}>Rename Board</Text>
+              <Text style={styles.renameModalTitle}>Rename Sparklette</Text>
               <TextInput
                 style={styles.renameModalInput}
                 value={newBoardName}
                 onChangeText={setNewBoardName}
-                placeholder="Enter board name"
+                placeholder="Enter sparklette name"
                 placeholderTextColor={theme.colors.textLight}
                 autoFocus
                 onSubmitEditing={handleRenameSubmit}
@@ -1030,7 +1030,7 @@ const BoardScreen: FC = () => {
 
                   <TextInput
                     style={styles.shareCaptionInput}
-                    placeholder="Add a caption (optional)"
+                    placeholder="Enter caption (optional)"
                     placeholderTextColor={theme.colors.textLight}
                     value={shareCaption}
                     onChangeText={setShareCaption}

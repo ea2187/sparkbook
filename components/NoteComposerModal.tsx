@@ -49,13 +49,13 @@ const NoteComposerModal: FC<NoteComposerModalProps> = ({
 
               <TextInput
                 style={styles.titleInput}
-                placeholder="Title"
+                placeholder="Enter title"
                 value={title}
                 onChangeText={setTitle}
               />
               <TextInput
                 style={styles.bodyInput}
-                placeholder="Write your note..."
+                placeholder="Enter note"
                 value={text}
                 onChangeText={setText}
                 multiline
@@ -102,7 +102,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 12,
+    minHeight: 44,
     marginBottom: 10,
   },
   bodyInput: {

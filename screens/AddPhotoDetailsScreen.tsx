@@ -75,7 +75,7 @@ const AddPhotoDetailsScreen: FC = () => {
 
   async function handleContinue() {
     if (!photoName.trim()) {
-      Alert.alert("Missing Name", "Please enter a name for your photo");
+      Alert.alert("Error", "Please enter a name for your photo");
       return;
     }
 
@@ -166,7 +166,7 @@ const AddPhotoDetailsScreen: FC = () => {
             <Text style={styles.label}>Photo Name</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter a name for this photo"
+              placeholder="Enter photo name"
               placeholderTextColor={theme.colors.textLight}
               value={photoName}
               onChangeText={setPhotoName}

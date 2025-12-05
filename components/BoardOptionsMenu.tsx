@@ -66,7 +66,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
     setLoading(false);
 
     if (error) {
-      Alert.alert("Error", "Failed to rename board");
+      Alert.alert("Error", "Failed to rename Sparklette");
       return;
     }
 
@@ -424,7 +424,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
                   style={styles.input}
                   value={newName}
                   onChangeText={setNewName}
-                  placeholder="Sparklette name"
+                  placeholder="Enter sparklette name"
                   autoFocus
                   editable={!loading}
                 />
@@ -526,7 +526,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
                 <Text style={styles.captionModalSubtitle}>Optional</Text>
                 <TextInput
                   style={styles.captionInput}
-                  placeholder="What's this Sparklette about?"
+                  placeholder="Enter description"
                   placeholderTextColor={theme.colors.textSecondary}
                   value={caption}
                   onChangeText={setCaption}

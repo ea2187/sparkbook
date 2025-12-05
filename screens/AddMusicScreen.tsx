@@ -189,7 +189,7 @@ const AddMusicScreen: FC = () => {
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search for a song or artist"
+          placeholder="Enter song or artist"
           placeholderTextColor="#999"
         />
         {searchQuery.length > 0 && (

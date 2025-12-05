@@ -135,7 +135,7 @@ const LoginScreen: FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <Text style={styles.label}>Email</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter your email"
+              placeholder="Enter email"
               placeholderTextColor={theme.colors.textLight}
               value={email}
               onChangeText={setEmail}
@@ -150,7 +150,7 @@ const LoginScreen: FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <Text style={styles.label}>Password</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter your password"
+              placeholder="Enter password"
               placeholderTextColor={theme.colors.textLight}
               value={password}
               onChangeText={setPassword}

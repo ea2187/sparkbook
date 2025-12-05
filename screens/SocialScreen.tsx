@@ -117,21 +117,6 @@ const SocialScreen: FC = () => {
   async function loadFeed() {
     setLoading(true);
     const data = await fetchCommunityFeed();
-    console.log('Community feed loaded:', data.length, 'posts');
-    // Log any posts with audio_url
-    data.forEach(post => {
-      if (post.attachments.some(a => a.audio_url)) {
-        console.log('Post with audio:', { 
-          postId: post.id, 
-          type: post.type,
-          attachments: post.attachments.map(a => ({ 
-            id: a.id, 
-            audio_url: a.audio_url,
-            media_type: a.media_type 
-          }))
-        });
-      }
-    });
     setPosts(data);
     
     // Fetch user info for all unique user IDs
@@ -142,9 +127,11 @@ const SocialScreen: FC = () => {
   }
 
   async function fetchUserInfo(userId: string) {
-    // Check cache first
-    if (userCache[userId]) {
-      return userCache[userId];
+    // Check cache first; if we already have a profile picture, return immediately.
+    // But if cached entry exists without profilePicture, still refetch to get it
+    const cached = userCache[userId];
+    if (cached && cached.profilePicture) {
+      return cached;
     }
 
     // Check static lookup table first (for usernames)
@@ -153,9 +140,9 @@ const SocialScreen: FC = () => {
       
       // Try to fetch from profiles table for profile picture only
       try {
-        const { data: profile, error } = await supabase
+        let { data: profile, error } = await supabase
           .from('profiles')
-          .select('username, first_name, last_name, profile_picture')
+          .select('username, full_name, avatar_initial, profile_picture')
           .eq('id', userId)
           .single();
 
@@ -167,17 +154,31 @@ const SocialScreen: FC = () => {
           if (name === "Jonathan") {
             name = "jontheartist";
           }
+          let profilePicture = (profile as any).profile_picture || null;
+          // If missing, try auth metadata for current user
+          if (!profilePicture) {
+            try {
+              const { data: { user: currentUser } } = await supabase.auth.getUser();
+              if (currentUser && currentUser.id === userId) {
+                const metaPic = currentUser.user_metadata?.profile_picture || currentUser.user_metadata?.profilePicture || null;
+                if (metaPic) {
+                  profilePicture = metaPic;
+                }
+              }
+            } catch (e) {
+              // ignore auth metadata fallback failure
+            }
+          }
           const userInfo = { 
             name: name, 
             initial: lookupInfo.initial, 
-            profilePicture: profile.profile_picture 
+            profilePicture: profilePicture || undefined
           };
           setUserCache(prev => ({ ...prev, [userId]: userInfo }));
           return userInfo;
         }
       } catch (profileError) {
         // If profiles table doesn't exist or has error, use lookup
-        console.log('Profiles table not available, using lookup table');
       }
       
       // Use lookup table info, but replace "Jonathan" with "jontheartist"
@@ -192,62 +193,79 @@ const SocialScreen: FC = () => {
 
     // Try to fetch from profiles table if not in lookup
     try {
+      // First attempt: schema with full_name + avatar_initial (+ username, profile_picture)
       let { data: profile, error } = await supabase
         .from('profiles')
-        .select('username, full_name, profile_picture')
+        .select('username, full_name, avatar_initial, profile_picture')
         .eq('id', userId)
         .single();
 
-      console.log('Fetching user profile:', { userId, profile, error });
-
-      // If profile doesn't exist, try to get user info from auth and create profile
+      // If the column doesn't exist (older schema), retry with first_name/last_name
       if (error && error.code === '42703') {
-        // Column doesn't exist - check if username column exists
-        const { data: profileAlt, error: errorAlt } = await supabase
+        const fallbackColumns = 'username, first_name, last_name, profile_picture';
+        const { data: profileFallback, error: fallbackError } = await supabase
           .from('profiles')
-          .select('full_name, profile_picture')
+          .select(fallbackColumns)
           .eq('id', userId)
           .single();
-        
-        if (!errorAlt && profileAlt) {
-          profile = profileAlt;
-          error = null;
+
+        if (!fallbackError && profileFallback) {
+          const firstName = (profileFallback as any).first_name || '';
+          const lastName = (profileFallback as any).last_name || '';
+          const username = (profileFallback as any).username || '';
+          let name = username || [firstName, lastName].filter(Boolean).join(' ').trim();
+          let initial = '?';
+          if (firstName) {
+            initial = firstName.charAt(0).toUpperCase();
+          } else if (username) {
+            initial = username.charAt(0).toUpperCase();
+          }
+          if (name === "Jonathan") name = "jontheartist";
+          if (!name) name = 'Community member';
+          let profilePicture = (profileFallback as any).profile_picture || null;
+          // If missing and this is the current user, try auth metadata
+          if (!profilePicture) {
+            try {
+              const { data: { user: currentUser } } = await supabase.auth.getUser();
+              if (currentUser && currentUser.id === userId) {
+                const metaPic = currentUser.user_metadata?.profile_picture || currentUser.user_metadata?.profilePicture || null;
+                if (metaPic) {
+                  profilePicture = metaPic;
+                }
+              }
+            } catch (e) {
+              // ignore auth metadata fallback failure
+            }
+          }
+
+          const userInfo = {
+            name,
+            initial,
+            profilePicture: profilePicture || undefined,
+          };
+          setUserCache(prev => ({ ...prev, [userId]: { ...prev[userId], ...userInfo } }));
+          return userInfo;
         }
       }
 
-      if (error && error.code === 'PGRST116') {
-        // Profile doesn't exist - try to get from auth and create it
-        console.log('Profile does not exist, fetching from auth...');
-        const { data: { user: authUser } } = await supabase.auth.admin.getUserById(userId);
-        
-        if (authUser && authUser.user_metadata) {
-          const metadata = authUser.user_metadata;
-          const fullName = metadata.full_name || metadata.firstName || metadata.first_name || '';
-          
-          // Try to create the profile
-          const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
-            .upsert({
-              id: userId,
-              full_name: fullName,
-              created_at: new Date().toISOString()
-            })
-            .select('full_name, profile_picture')
-            .single();
-          
-          if (!createError && newProfile) {
-            profile = newProfile;
-            error = null;
-          }
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // Profile doesn't exist - it should be created by trigger, but if not, use fallback
+          // Profile missing
+        } else if (error.code === '42501') {
+          // Permission denied - RLS issue
+          console.error('RLS Permission denied for profiles table:', error.message);
+        } else {
+          console.error('Error fetching profile:', error.code, error.message);
         }
       }
 
       if (!error && profile) {
-        const fullName = profile.full_name || '';
-        const username = profile.username || '';
-        
-        // Always prioritize full_name if available, then username
-        let name = fullName || username;
+        // Prioritize username, then full_name
+        const username = (profile as any).username || '';
+        const fullName = (profile as any).full_name || '';
+        let name = username || fullName; // Show username first, fallback to full_name
+        const initial = (profile as any).avatar_initial || (name ? name.charAt(0).toUpperCase() : '?');
         
         // Replace "Jonathan" with "jontheartist" if it appears
         if (name === "Jonathan") {
@@ -257,20 +275,32 @@ const SocialScreen: FC = () => {
           name = 'Community member';
         }
 
-        let initial = '?';
-        if (fullName) {
-          initial = fullName.charAt(0).toUpperCase();
-        } else if (username) {
-          initial = username.charAt(0).toUpperCase();
+        let profilePicture = (profile as any).profile_picture || null;
+        // If missing, try auth metadata for current user
+        if (!profilePicture) {
+          try {
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            if (currentUser && currentUser.id === userId) {
+              const metaPic = currentUser.user_metadata?.profile_picture || currentUser.user_metadata?.profilePicture || null;
+              if (metaPic) {
+                profilePicture = metaPic;
+              }
+            }
+          } catch (e) {
+            // ignore auth metadata fallback failure
+          }
         }
-
-        const userInfo = { name, initial, profilePicture: profile.profile_picture };
-        setUserCache(prev => ({ ...prev, [userId]: userInfo }));
+        const userInfo = { 
+          name, 
+          initial, 
+          profilePicture: profilePicture || undefined
+        };
+        setUserCache(prev => ({ ...prev, [userId]: { ...prev[userId], ...userInfo } }));
         return userInfo;
       }
     } catch (profileError) {
       // Profiles table might not exist, try auth metadata for current user
-      console.log('Profiles table not available, trying auth metadata');
+      console.error('Exception fetching profile:', profileError);
     }
 
     // Try to get current user's info if it matches (fallback)
@@ -308,7 +338,7 @@ const SocialScreen: FC = () => {
 
         const profilePicture = metadata.profile_picture || metadata.profilePicture;
         const userInfo = { name, initial, profilePicture };
-        setUserCache(prev => ({ ...prev, [userId]: userInfo }));
+        setUserCache(prev => ({ ...prev, [userId]: { ...prev[userId], ...userInfo } }));
         return userInfo;
       }
     } catch (error) {
@@ -316,8 +346,8 @@ const SocialScreen: FC = () => {
     }
 
     // Fallback
-    const fallback = { name: 'Community member', initial: '?' };
-    setUserCache(prev => ({ ...prev, [userId]: fallback }));
+    const fallback = { name: 'Community member', initial: '?', profilePicture: undefined as string | undefined };
+    setUserCache(prev => ({ ...prev, [userId]: { ...prev[userId], ...fallback } }));
     return fallback;
   }
 
@@ -782,11 +812,9 @@ const SocialScreen: FC = () => {
 
   async function handleAudioPlayback(postId: string, audioUrl: string) {
     try {
-      console.log('handleAudioPlayback called:', { postId, audioUrl });
       
       // If loading, prevent multiple clicks
       if (loadingAudio[postId]) {
-        console.log('Already loading, ignoring click');
         return;
       }
 
@@ -797,14 +825,14 @@ const SocialScreen: FC = () => {
         const status = await existingSound.getStatusAsync();
         if (status.isLoaded) {
           if (status.isPlaying) {
-            console.log('Pausing audio');
+            // pause
             await existingSound.pauseAsync();
             setPlayingAudio(prev => ({
               ...prev,
               [postId]: { ...prev[postId], isPlaying: false }
             }));
           } else {
-            console.log('Resuming audio');
+            // resume
             await existingSound.playAsync();
             setPlayingAudio(prev => ({
               ...prev,
@@ -815,7 +843,6 @@ const SocialScreen: FC = () => {
         }
       }
 
-      console.log('Loading new audio...');
 
       // Show loading state
       setLoadingAudio(prev => ({ ...prev, [postId]: true }));
@@ -839,15 +866,12 @@ const SocialScreen: FC = () => {
       });
 
       // Load and play new audio
-      console.log('Creating audio sound with URI:', audioUrl);
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
         { shouldPlay: true }
       );
 
-      console.log('Sound created, getting initial status...');
       const initialStatus = await sound.getStatusAsync();
-      console.log('Initial status:', initialStatus);
 
       if (!initialStatus.isLoaded) {
         throw new Error('Sound failed to load');
@@ -871,7 +895,6 @@ const SocialScreen: FC = () => {
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded) {
           if (status.didJustFinish) {
-            console.log('Audio finished playing');
             // Reset to play icon when finished
             setPlayingAudio(prev => {
               if (!prev[postId]?.sound) return prev;
@@ -898,7 +921,6 @@ const SocialScreen: FC = () => {
         }
       });
 
-      console.log('Audio setup complete');
 
       // Clear loading state
       setLoadingAudio(prev => ({ ...prev, [postId]: false }));
@@ -925,14 +947,13 @@ const SocialScreen: FC = () => {
     const duration = audioState?.duration || 0;
     const progress = duration > 0 ? position / duration : 0;
 
-    console.log('Rendering audio card:', { postId: post.id, audioUrl: attachment?.audio_url, isPlaying, isLoading });
 
     return (
       <View style={styles.card}>
         <TouchableOpacity 
           style={styles.audioContentMain}
           onPress={() => {
-            console.log('Audio card pressed:', attachment?.audio_url);
+            // audio card press
             if (attachment?.audio_url && !isLoading) {
               handleAudioPlayback(post.id, attachment.audio_url);
             }
@@ -1103,7 +1124,7 @@ const SocialScreen: FC = () => {
           return (
             <View key={post.id} style={styles.postContainer}>
               <View style={styles.postHeader}>
-                {userInfo.profilePicture ? (
+                {userInfo.profilePicture && userInfo.profilePicture.trim() ? (
                   <Image source={{ uri: userInfo.profilePicture }} style={styles.avatarImage} />
                 ) : (
                   <View style={styles.avatar}>

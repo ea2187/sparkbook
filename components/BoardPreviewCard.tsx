@@ -2,6 +2,7 @@ import React, { FC } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import theme from '../styles/theme';
+import { formatRelativeTime } from '../utils/formatRelativeTime';
 
 interface PreviewItem {
   id: string;
@@ -14,6 +15,7 @@ interface BoardPreviewCardProps {
   title: string;
   previewImages?: string[];
   previewItems?: PreviewItem[];
+  lastModified?: Date | string | number | null;
   onPress: () => void;
   onLongPress?: () => void;
   onMenuPress?: () => void;
@@ -23,6 +25,7 @@ const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
   title,
   previewImages = [],
   previewItems = [],
+  lastModified,
   onPress,
   onLongPress,
   onMenuPress,
@@ -60,6 +63,7 @@ const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
             horizontal 
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.previewRow}
+            nestedScrollEnabled={true}
           >
             {displayItems.map((item) => (
               <View key={item.id} style={styles.thumbnailContainer}>
@@ -104,22 +108,31 @@ const BoardPreviewCard: FC<BoardPreviewCardProps> = ({
       {/* Divider line */}
       <View style={styles.divider} />
 
-      {/* Board title */}
-      <Text style={styles.title} numberOfLines={1}>
-        {title}
-      </Text>
+      {/* Bottom section with title and menu */}
+      <View style={styles.bottomSection}>
+        <View style={styles.titleSection}>
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
+          {lastModified && (
+            <Text style={styles.lastModified}>
+              Updated {formatRelativeTime(lastModified)}
+            </Text>
+          )}
+        </View>
 
-      {/* Three dots menu icon */}
-      <TouchableOpacity 
-        style={styles.menuIcon}
-        onPress={(e) => {
-          e.stopPropagation();
-          onMenuPress?.();
-        }}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
-      </TouchableOpacity>
+        {/* Three dots menu icon */}
+        <TouchableOpacity 
+          style={styles.menuIcon}
+          onPress={(e) => {
+            e.stopPropagation();
+            onMenuPress?.();
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 };
@@ -138,8 +151,8 @@ const styles = StyleSheet.create({
   previewRowContainer: {
     width: '100%',
     alignSelf: 'stretch',
-    height: 60,
-    marginBottom: 8,
+    height: 90,
+    marginBottom: 4,
   },
   previewRow: {
     flexDirection: 'row',
@@ -148,8 +161,8 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   thumbnailContainer: {
-    width: 60,
-    height: 60,
+    width: 90,
+    height: 90,
     borderRadius: 8,
     overflow: 'hidden',
   },
@@ -174,28 +187,47 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   noteText: {
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textSecondary,
-    lineHeight: 10,
+    lineHeight: 14,
     textAlign: 'center',
   },
   divider: {
     height: 1,
     backgroundColor: '#E5E5E5',
-    marginVertical: 8,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  bottomSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    minHeight: 44,
+  },
+  titleSection: {
+    flex: 1,
+    paddingRight: 12,
   },
   title: {
     fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.medium,
     color: theme.colors.textPrimary,
-    marginTop: 4,
-    paddingRight: 30,
+    marginBottom: 2,
+  },
+  lastModified: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
   },
   menuIcon: {
-    position: 'absolute',
-    bottom: 14,
-    right: 14,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
   },
 });
 

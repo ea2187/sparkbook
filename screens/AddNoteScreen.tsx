@@ -144,7 +144,7 @@ const AddNoteScreen: FC = () => {
           <Text style={styles.label}>Note</Text>
           <TextInput
             style={styles.bodyInput}
-            placeholder="Write your note..."
+            placeholder="Enter note"
             placeholderTextColor={theme.colors.textLight}
             value={text}
             onChangeText={setText}

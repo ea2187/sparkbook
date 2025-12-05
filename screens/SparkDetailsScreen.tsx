@@ -478,7 +478,7 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
                     style={styles.titleInput}
                     value={editedNoteTitle}
                     onChangeText={setEditedNoteTitle}
-                    placeholder="Note title..."
+                    placeholder="Enter note title"
                     placeholderTextColor={theme.colors.textLight}
                   />
                 </View>
@@ -488,7 +488,7 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
                     style={[styles.noteTextInput, { flex: 1 }]}
                     value={editedNoteText}
                     onChangeText={setEditedNoteText}
-                    placeholder="Write your note..."
+                    placeholder="Enter note"
                     placeholderTextColor={theme.colors.textLight}
                     multiline
                     textAlignVertical="top"
@@ -638,7 +638,7 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
               style={styles.input}
               value={editedName}
               onChangeText={setEditedName}
-              placeholder="Spark name"
+              placeholder="Enter spark name"
               autoFocus
               editable={!saving}
             />
@@ -771,7 +771,7 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
               style={styles.shareModalInput}
               value={shareCaption}
               onChangeText={setShareCaption}
-              placeholder="Add a caption (optional)..."
+              placeholder="Enter caption (optional)"
               placeholderTextColor={theme.colors.textLight}
               multiline
               maxLength={500}
