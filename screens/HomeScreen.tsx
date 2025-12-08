@@ -651,6 +651,7 @@ const HomeScreen: FC = () => {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.loadingText}>Loading sparklettes...</Text>
           </View>
         ) : filteredAndSortedBoards.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -906,6 +907,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: theme.spacing.xxxl,
+  },
+  loadingText: {
+    marginTop: theme.spacing.sm,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.textSecondary,
   },
   emptyContainer: {
     flex: 1,

@@ -167,7 +167,7 @@ const ProfileScreen: FC = () => {
               // Update UI
               setPosts(prev => prev.filter(p => p.id !== selectedPostId));
               handleCloseMenu();
-              Alert.alert('Success', 'Post unshared successfully');
+              Alert.alert('Success', 'Unshared from community!');
             } catch (error) {
               console.error('Error unsharing post:', error);
               Alert.alert('Error', 'Failed to unshare post');
@@ -309,6 +309,7 @@ const ProfileScreen: FC = () => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
   }
@@ -402,7 +403,7 @@ const ProfileScreen: FC = () => {
 
           {posts.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="share-outline" size={64} color={theme.colors.textLight} />
+              <Ionicons name="share-social-outline" size={64} color={theme.colors.textLight} />
               <Text style={styles.emptyStateText}>No shared works yet</Text>
               <Text style={styles.emptyStateSubtext}>
                 Share your Sparklettes to see them here
@@ -451,7 +452,7 @@ const ProfileScreen: FC = () => {
                     <ActivityIndicator size="small" color={theme.colors.error} />
                   ) : (
                     <>
-                      <Ionicons name="share-outline" size={20} color={theme.colors.error} />
+                      <Ionicons name="share-social-outline" size={20} color={theme.colors.error} />
                       <Text style={[styles.menuItemText, { color: theme.colors.error }]}>
                         Unshare
                       </Text>
@@ -484,6 +485,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: theme.colors.white,
+  },
+  loadingText: {
+    marginTop: theme.spacing.sm,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.textSecondary,
   },
   scrollView: {
     flex: 1,

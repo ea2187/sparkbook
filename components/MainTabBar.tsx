@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   label: {
-    fontSize: theme.typography.fontSize.sm,
+    fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.textSecondary,
     textAlign: "center",

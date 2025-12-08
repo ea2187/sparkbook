@@ -325,7 +325,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
       setSharedPostId(post.id);
       setShowCaptionModal(false);
       setCaption("");
-      setSuccessMessage("Sparklette shared to community!");
+      setSuccessMessage("Shared to community!");
       setShowSuccessModal(true);
       onClose();
       
@@ -375,7 +375,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
               } else {
                 setIsShared(false);
                 setSharedPostId(null);
-                setSuccessMessage("Sparklette unshared from community!");
+                setSuccessMessage("Unshared from community!");
                 setShowSuccessModal(true);
                 onClose();
                 
@@ -469,7 +469,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
                     onPress={handleUnshare}
                     disabled={loading}
                   >
-                    <Ionicons name="share" size={24} color={theme.colors.primary} />
+                    <Ionicons name="share-social" size={24} color={theme.colors.primary} />
                     <Text style={styles.menuItemText}>Unshare Sparklette</Text>
                   </TouchableOpacity>
                 ) : (
@@ -478,7 +478,7 @@ const BoardOptionsMenu: FC<BoardOptionsMenuProps> = ({
                     onPress={handleSharePress}
                     disabled={loading}
                   >
-                    <Ionicons name="share-outline" size={24} color={theme.colors.primary} />
+                    <Ionicons name="share-social-outline" size={24} color={theme.colors.primary} />
                     <Text style={styles.menuItemText}>Share Sparklette</Text>
                   </TouchableOpacity>
                 )}

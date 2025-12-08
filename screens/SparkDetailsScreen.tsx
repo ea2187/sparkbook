@@ -45,10 +45,13 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [shareCaption, setShareCaption] = useState("");
   const [sharingPost, setSharingPost] = useState(false);
+  const [isShared, setIsShared] = useState(false);
+  const [sharedPostId, setSharedPostId] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       fetchSpark();
+      checkIfShared();
     }, [sparkId])
   );
 
@@ -81,6 +84,58 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
     setTempSize({ width: data.width || 160, height: data.height || 160 });
     setEditedNoteTitle(data.title || "");
     setEditedNoteText(data.text_content || "");
+    
+    // Check if spark is shared after loading
+    checkIfShared();
+  }
+
+  async function checkIfShared() {
+    if (!sparkId) {
+      setIsShared(false);
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setIsShared(false);
+        return;
+      }
+
+      // Check if this spark is attached to any community post
+      const { data: attachments, error } = await supabase
+        .from('community_attachments')
+        .select('post_id')
+        .eq('spark_id', sparkId)
+        .limit(1);
+
+      if (error || !attachments || attachments.length === 0) {
+        setIsShared(false);
+        setSharedPostId(null);
+        return;
+      }
+
+      // Verify the post belongs to the current user
+      const postId = attachments[0].post_id;
+      const { data: post } = await supabase
+        .from('community_posts')
+        .select('id, user_id')
+        .eq('id', postId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (post) {
+        setIsShared(true);
+        setSharedPostId(postId);
+      } else {
+        setIsShared(false);
+        setSharedPostId(null);
+      }
+    } catch (error) {
+      console.error("Error checking if shared:", error);
+      setIsShared(false);
+      setSharedPostId(null);
+    }
   }
 
   async function handleSaveName() {
@@ -259,9 +314,11 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
         return;
       }
 
-      Alert.alert('Success', 'Spark shared to community!');
+      Alert.alert('Success', 'Shared to community!');
       setShareModalVisible(false);
       setShareCaption('');
+      setIsShared(true);
+      setSharedPostId(post.id);
     } catch (error) {
       console.error('Error sharing spark:', error);
       Alert.alert('Error', 'Failed to share spark');
@@ -418,7 +475,11 @@ const SparkDetailsScreen: FC<Props> = ({ navigation, route }) => {
             style={styles.shareButton}
             onPress={handleShareToCommunity}
           >
-            <Ionicons name="share-social-outline" size={24} color={theme.colors.primary} />
+            <Ionicons 
+              name={isShared ? "share-social" : "share-social-outline"} 
+              size={24} 
+              color={isShared ? theme.colors.primary : theme.colors.textSecondary} 
+            />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.deleteButton}

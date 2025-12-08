@@ -16,7 +16,6 @@ interface MoreMenuProps {
   onClose: () => void;
   onImportFile: () => void;
   onToggleGrid: () => void;
-  onExportAsImage: () => void;
   onRenameBoard: () => void;
   onShareToCommunity: () => void;
   gridVisible: boolean;
@@ -27,7 +26,6 @@ const MoreMenu: FC<MoreMenuProps> = ({
   onClose,
   onImportFile,
   onToggleGrid,
-  onExportAsImage,
   onRenameBoard,
   onShareToCommunity,
   gridVisible,
@@ -154,37 +152,12 @@ const MoreMenu: FC<MoreMenuProps> = ({
                     ]}
                   >
                     <Ionicons
-                      name="share-social"
+                      name="share-social-outline"
                       size={28}
                       color={theme.colors.primary}
                     />
                   </View>
                   <Text style={styles.menuItemText}>Share to Community</Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={theme.colors.textLight}
-                  />
-                </TouchableOpacity>
-
-                {/* Export as Image */}
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => handleAction(onExportAsImage)}
-                >
-                  <View
-                    style={[
-                      styles.iconContainer,
-                      { backgroundColor: "#FFF4E0" },
-                    ]}
-                  >
-                    <Ionicons
-                      name="download-outline"
-                      size={28}
-                      color={theme.colors.secondary}
-                    />
-                  </View>
-                  <Text style={styles.menuItemText}>Export Board as Image</Text>
                   <Ionicons
                     name="chevron-forward"
                     size={20}

@@ -38,10 +38,14 @@ export function organizeBoardSimple(
   const startX = viewportX + padding;
   const startY = viewportY + padding;
   
+  // Calculate dynamic cell sizes based on actual spark dimensions
+  const maxWidth = Math.max(...sparks.map(s => s.width), 200);
+  const maxHeight = Math.max(...sparks.map(s => s.height), 200);
+  const cellWidth = maxWidth + padding;
+  const cellHeight = maxHeight + padding;
+  
   // Calculate grid dimensions
   const cols = Math.ceil(Math.sqrt(sparks.length));
-  const cellWidth = 250; // Fixed cell width
-  const cellHeight = 200; // Fixed cell height
   
   // Calculate starting position (top-left of grid within viewport)
   const availableWidth = boardWidth - padding * 2;
@@ -50,13 +54,13 @@ export function organizeBoardSimple(
   const gridStartY = startY;
 
   if (method === 'grid') {
-    // Arrange in a grid within the viewport
+    // Arrange in a grid within the viewport, accounting for actual spark sizes
     sparks.forEach((spark, index) => {
       const row = Math.floor(index / cols);
       const col = index % cols;
+      // Center spark within its cell, ensuring no overlap
       const x = gridStartX + col * cellWidth + (cellWidth - spark.width) / 2;
       const y = gridStartY + row * cellHeight + (cellHeight - spark.height) / 2;
-      // Allow items to extend beyond viewport if needed
       positions.push({
         id: spark.id,
         x,
@@ -64,7 +68,7 @@ export function organizeBoardSimple(
       });
     });
   } else if (method === 'byType') {
-    // Group by type within viewport
+    // Group by type within viewport, accounting for actual spark sizes
     const byType: { [key: string]: SparkInfo[] } = {};
     sparks.forEach(spark => {
       if (!byType[spark.type]) byType[spark.type] = [];
@@ -74,45 +78,54 @@ export function organizeBoardSimple(
     let currentY = startY;
     Object.keys(byType).forEach(type => {
       const typeSparks = byType[type];
+      // Calculate cell size for this type based on its sparks
+      const typeMaxWidth = Math.max(...typeSparks.map(s => s.width), 200);
+      const typeMaxHeight = Math.max(...typeSparks.map(s => s.height), 200);
+      const typeCellWidth = typeMaxWidth + padding;
+      const typeCellHeight = typeMaxHeight + padding;
+      
       const typeCols = Math.ceil(Math.sqrt(typeSparks.length));
-      const typeGridWidth = Math.min(typeCols * cellWidth, availableWidth);
+      const typeGridWidth = Math.min(typeCols * typeCellWidth, availableWidth);
       const typeStartX = startX + Math.max(0, (availableWidth - typeGridWidth) / 2);
       
       typeSparks.forEach((spark, index) => {
         const row = Math.floor(index / typeCols);
         const col = index % typeCols;
-        const x = typeStartX + col * cellWidth + (cellWidth - spark.width) / 2;
-        const y = currentY + row * cellHeight + (cellHeight - spark.height) / 2;
-        // Allow items to extend beyond viewport if needed
+        // Center spark within its cell, ensuring no overlap
+        const x = typeStartX + col * typeCellWidth + (typeCellWidth - spark.width) / 2;
+        const y = currentY + row * typeCellHeight + (typeCellHeight - spark.height) / 2;
         positions.push({
           id: spark.id,
           x,
           y,
         });
       });
-      currentY += Math.ceil(typeSparks.length / typeCols) * cellHeight + padding;
+      // Move to next type group with proper spacing
+      currentY += Math.ceil(typeSparks.length / typeCols) * typeCellHeight + padding;
     });
   } else {
     // Smart spacing - maintain relative positions but remove overlaps, within viewport
+    // Account for actual spark sizes to prevent overlaps
     const sorted = [...sparks].sort((a, b) => a.x - b.x || a.y - b.y);
-    const totalWidth = sorted.reduce((sum, s) => sum + s.width + padding, 0);
+    const totalWidth = sorted.reduce((sum, s) => sum + s.width + padding, 0) - padding; // Subtract last padding
     const availableWidth = boardWidth - padding * 2;
     let currentX = startX + Math.max(0, (availableWidth - totalWidth) / 2);
     let currentY = startY;
     let maxHeightInRow = 0;
 
     sorted.forEach(spark => {
+      // Check if spark would overflow viewport width
       if (currentX + spark.width > viewportX + boardWidth - padding) {
         currentX = startX;
         currentY += maxHeightInRow + padding;
         maxHeightInRow = 0;
       }
-      // Allow items to extend beyond viewport if needed
       positions.push({
         id: spark.id,
         x: currentX,
         y: currentY,
       });
+      // Move to next position with padding based on actual spark width
       currentX += spark.width + padding;
       maxHeightInRow = Math.max(maxHeightInRow, spark.height);
     });

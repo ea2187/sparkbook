@@ -335,15 +335,6 @@ const BoardScreen: FC = () => {
     setGridVisible(!gridVisible);
   }
 
-  // Handle export as image
-  function handleExportAsImage() {
-    Alert.alert(
-      "Export as Image",
-      "This feature will export your board as an image. Coming soon!",
-      [{ text: "OK" }]
-    );
-  }
-
   // Handle share to community
   function handleShareToCommunity() {
     setShareModalVisible(true);
@@ -427,7 +418,7 @@ const BoardScreen: FC = () => {
         if (attachError) throw attachError;
       }
 
-      Alert.alert('Success', 'Board shared to community!', [
+      Alert.alert('Success', 'Shared to community!', [
         { text: 'OK', onPress: () => {
           setShareModalVisible(false);
           setShareCaption('');
@@ -888,7 +879,6 @@ const BoardScreen: FC = () => {
         onClose={() => setMoreMenuVisible(false)}
         onImportFile={handleImportFile}
         onToggleGrid={handleToggleGrid}
-        onExportAsImage={handleExportAsImage}
         onRenameBoard={handleRenameBoard}
         onShareToCommunity={handleShareToCommunity}
         gridVisible={gridVisible}

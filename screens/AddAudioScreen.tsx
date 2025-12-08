@@ -1,4 +1,4 @@
-import React, { FC, useState, useEffect } from 'react';
+import React, { FC, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
@@ -30,6 +31,83 @@ interface Board {
   created_at: string;
 }
 
+// Wave Animation Component
+const WaveAnimation: FC<{ isRecording: boolean }> = ({ isRecording }) => {
+  const wave1 = useRef(new Animated.Value(0.3)).current;
+  const wave2 = useRef(new Animated.Value(0.5)).current;
+  const wave3 = useRef(new Animated.Value(0.4)).current;
+  const wave4 = useRef(new Animated.Value(0.6)).current;
+  const wave5 = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    if (!isRecording) {
+      // Reset to base heights when not recording
+      wave1.setValue(0.3);
+      wave2.setValue(0.5);
+      wave3.setValue(0.4);
+      wave4.setValue(0.6);
+      wave5.setValue(0.4);
+      return;
+    }
+
+    // Create staggered animations for each wave bar
+    const createAnimation = (animValue: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(animValue, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(animValue, {
+            toValue: 0.2,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+    };
+
+    const animations = [
+      createAnimation(wave1, 0),
+      createAnimation(wave2, 100),
+      createAnimation(wave3, 200),
+      createAnimation(wave4, 300),
+      createAnimation(wave5, 150),
+    ];
+
+    Animated.parallel(animations).start();
+
+    return () => {
+      animations.forEach(anim => anim.stop());
+    };
+  }, [isRecording, wave1, wave2, wave3, wave4, wave5]);
+
+  const getScaleY = (animValue: Animated.Value) => {
+    return animValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.15, 1],
+    });
+  };
+
+  return (
+    <View style={styles.waveContainer}>
+      {[wave1, wave2, wave3, wave4, wave5].map((animValue, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            styles.waveBar,
+            {
+              transform: [{ scaleY: getScaleY(animValue) }],
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+};
+
 const AddAudioScreen: FC = () => {
   const navigation = useNavigation<NavigationProp<HomeStackParamList>>();
   
@@ -43,18 +121,32 @@ const AddAudioScreen: FC = () => {
   const [title, setTitle] = useState('');
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [totalDuration, setTotalDuration] = useState<number | null>(null);
+  const [playbackPosition, setPlaybackPosition] = useState(0);
 
   useEffect(() => {
     initializeAudio();
     fetchBoards();
 
     return () => {
-      if (recording) {
-        recording.stopAndUnloadAsync();
-      }
-      if (sound) {
-        sound.unloadAsync();
-      }
+      // Cleanup on unmount
+      const cleanup = async () => {
+        if (recording) {
+          try {
+            await recording.stopAndUnloadAsync();
+          } catch (e) {
+            console.log('Cleanup recording error:', e);
+          }
+        }
+        if (sound) {
+          try {
+            await sound.unloadAsync();
+          } catch (e) {
+            console.log('Cleanup sound error:', e);
+          }
+        }
+      };
+      cleanup();
     };
   }, []);
 
@@ -107,22 +199,45 @@ const AddAudioScreen: FC = () => {
   }
 
   async function startRecording() {
+    // Prevent starting if already recording
+    if (recording) {
+      console.log('Already recording, stopping first...');
+      await stopRecording();
+      // Wait a bit for cleanup
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
     try {
+      // Clean up existing sound if any
+      if (sound) {
+        try {
+          await sound.unloadAsync();
+        } catch (e) {
+          console.log('Sound cleanup:', e);
+        }
+        setSound(null);
+      }
+      
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
 
-      const { recording } = await Audio.Recording.createAsync(
+      const { recording: newRecording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       
-      setRecording(recording);
+      setRecording(newRecording);
       setAudioUri(null);
       setRecordingDuration(0);
+      setTotalDuration(null);
+      setPlaybackPosition(0);
+      setIsPlaying(false);
     } catch (err) {
       console.error('Failed to start recording', err);
-      Alert.alert('Error', 'Could not start recording.');
+      Alert.alert('Error', 'Could not start recording. Please try again.');
+      // Reset recording state on error
+      setRecording(null);
     }
   }
 
@@ -136,6 +251,9 @@ const AddAudioScreen: FC = () => {
       
       if (uri) {
         setAudioUri(uri);
+        // Store the total duration from recordingDuration state
+        // This is the most reliable way since we track it during recording
+        setTotalDuration(recordingDuration);
       }
     } catch (err) {
       console.error('Failed to stop recording', err);
@@ -194,18 +312,38 @@ const AddAudioScreen: FC = () => {
             await sound.playAsync();
             setIsPlaying(true);
           }
+          // Update position and duration from current status
+          if (status.positionMillis !== undefined) {
+            setPlaybackPosition(Math.floor(status.positionMillis / 1000));
+          }
+          if (status.durationMillis !== undefined && totalDuration === null) {
+            setTotalDuration(Math.floor(status.durationMillis / 1000));
+          }
         }
       } else {
         // Load and play audio
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: audioUri },
-          { shouldPlay: true },
-          (status) => {
-            if (status.isLoaded && status.didJustFinish) {
+          { shouldPlay: true }
+        );
+        
+        // Set up playback status listener
+        newSound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded) {
+            if (status.didJustFinish) {
               setIsPlaying(false);
+              setPlaybackPosition(0);
+            } else {
+              // Update playback position and total duration
+              if (status.positionMillis !== undefined) {
+                setPlaybackPosition(Math.floor(status.positionMillis / 1000));
+              }
+              if (status.durationMillis !== undefined && totalDuration === null) {
+                setTotalDuration(Math.floor(status.durationMillis / 1000));
+              }
             }
           }
-        );
+        });
         
         setSound(newSound);
         setIsPlaying(true);
@@ -239,13 +377,12 @@ const AddAudioScreen: FC = () => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Recording Interface */}
         <View style={styles.recordingSection}>
-          <View style={[styles.micIcon, recording && styles.micIconRecording]}>
-            <Ionicons 
-              name={recording ? 'mic' : 'mic-outline'} 
-              size={60} 
-              color={recording ? '#EF4444' : theme.colors.primary} 
-            />
-          </View>
+          {recording && (
+            <>
+              <WaveAnimation isRecording={!!recording} />
+              <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
+            </>
+          )}
 
           <Text style={styles.statusText}>
             {recording 
@@ -255,21 +392,47 @@ const AddAudioScreen: FC = () => {
                 : 'Ready to record'}
           </Text>
 
-          {recording && (
-            <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
+          {audioUri && !recording && totalDuration !== null && (
+            <Text style={styles.totalDurationText}>
+              {isPlaying 
+                ? `${formatDuration(totalDuration - playbackPosition)} remaining`
+                : `Total: ${formatDuration(totalDuration)}`}
+            </Text>
           )}
 
-          <TouchableOpacity
-            style={[styles.recordButton, recording && styles.recordButtonActive]}
-            onPress={recording ? stopRecording : startRecording}
-            disabled={uploading}
-          >
-            <Ionicons
-              name={recording ? 'square' : 'mic'}
-              size={32}
-              color={theme.colors.white}
-            />
-          </TouchableOpacity>
+          {!audioUri && !recording && (
+            <TouchableOpacity
+              style={[
+                styles.recordButton, 
+                styles.recordButtonLarge
+              ]}
+              onPress={startRecording}
+              disabled={uploading}
+            >
+              <Ionicons
+                name="mic"
+                size={48}
+                color={theme.colors.white}
+              />
+            </TouchableOpacity>
+          )}
+
+          {recording && (
+            <TouchableOpacity
+              style={[
+                styles.recordButton,
+                styles.recordButtonActive
+              ]}
+              onPress={stopRecording}
+              disabled={uploading}
+            >
+              <Ionicons
+                name="stop"
+                size={32}
+                color={theme.colors.white}
+              />
+            </TouchableOpacity>
+          )}
 
           {audioUri && !recording && (
             <View style={styles.postRecordingButtons}>
@@ -388,7 +551,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 50,
+    paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
@@ -407,17 +570,19 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     paddingHorizontal: 32,
   },
-  micIcon: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#E8EFFF',
-    alignItems: 'center',
+  waveContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     justifyContent: 'center',
-    marginBottom: 24,
+    height: 120,
+    marginBottom: 16,
+    gap: 8,
   },
-  micIconRecording: {
-    backgroundColor: '#FEE2E2',
+  waveBar: {
+    width: 8,
+    height: 60,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 4,
   },
   statusText: {
     fontSize: 18,
@@ -431,6 +596,12 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     marginBottom: 24,
   },
+  totalDurationText: {
+    fontSize: 18,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.textSecondary,
+    marginBottom: 16,
+  },
   recordButton: {
     width: 80,
     height: 80,
@@ -440,13 +611,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...theme.shadows.lg,
   },
+  recordButtonLarge: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 24,
+  },
   recordButtonActive: {
     backgroundColor: '#EF4444',
   },
   postRecordingButtons: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
     marginTop: 16,
   },
   playButton: {

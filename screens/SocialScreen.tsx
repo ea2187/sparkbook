@@ -1075,6 +1075,7 @@ const SocialScreen: FC = () => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>Loading community feed...</Text>
       </View>
     );
   }
@@ -1343,6 +1344,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: theme.colors.backgroundSecondary,
+  },
+  loadingText: {
+    marginTop: theme.spacing.sm,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.textSecondary,
   },
   header: {
     backgroundColor: theme.colors.white,

@@ -52,6 +52,9 @@ const fetcher = <T>(url: string, token: string): Promise<AxiosResponse<T> | null
     console.error('Full error:', e);
     if (e.response?.status === 401) {
       alert('Spotify session expired. Please reconnect your account.');
+    } else if (e.response?.status === 403) {
+      const errorMessage = e.response?.data?.error?.message || 'Access forbidden';
+      alert(`Spotify access denied (403): ${errorMessage}\n\nThis usually means:\n- Missing required permissions\n- Not enough listening history\n\nPlease reconnect your Spotify account.`);
     } else {
       alert(ERROR_ALERT);
     }

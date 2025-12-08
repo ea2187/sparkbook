@@ -78,8 +78,8 @@ const App: FC = () => {
     const route = props.state.routes[props.state.index];
     const routeName = getFocusedRouteNameFromRoute(route) ?? "HomeMain";
     
-    // Hide tab bar on Board, PhotoPicker, AddPhotoDetails, SparkDetails, ImportFile, Profile, and EditProfile screens
-    if (routeName === "Board" || routeName === "PhotoPicker" || routeName === "AddPhotoDetails" || routeName === "SparkDetails" || routeName === "ImportFile" || routeName === "Profile" || routeName === "EditProfile") {
+    // Hide tab bar on Board, PhotoPicker, AddPhotoDetails, SparkDetails, ImportFile, Profile, EditProfile, AddNote, and AddAudio screens
+    if (routeName === "Board" || routeName === "PhotoPicker" || routeName === "AddPhotoDetails" || routeName === "SparkDetails" || routeName === "ImportFile" || routeName === "Profile" || routeName === "EditProfile" || routeName === "AddNote" || routeName === "AddAudio") {
       return null;
     }
     
